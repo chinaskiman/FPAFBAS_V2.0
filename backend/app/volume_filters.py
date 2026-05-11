@@ -15,6 +15,7 @@ def compute_vol_metrics(volumes: Iterable[float], window_ma: int = 10, window_ma
             "vol_ma5_last": None,
             "vol_ma5_slope_pct": None,
             "vol_ma5_slope_ok": False,
+            "vol_highest10": False,
         }
     vol_last = series[-1]
     vol_ma10 = sma(series, window_ma)
@@ -33,6 +34,9 @@ def compute_vol_metrics(volumes: Iterable[float], window_ma: int = 10, window_ma
             vol_ma5_slope_pct = ((vol_ma5[-1] - prev) / prev) * 100
 
     vol_ma5_slope_ok = vol_ma5_slope_pct is not None and vol_ma5_slope_pct > 1.8
+    vol_highest10 = False
+    if len(series) >= 10:
+        vol_highest10 = all(vol_last >= value for value in series[-10:])
 
     return {
         "vol_last": vol_last,
@@ -41,6 +45,7 @@ def compute_vol_metrics(volumes: Iterable[float], window_ma: int = 10, window_ma
         "vol_ma5_last": vol_ma5_last,
         "vol_ma5_slope_pct": vol_ma5_slope_pct,
         "vol_ma5_slope_ok": vol_ma5_slope_ok,
+        "vol_highest10": vol_highest10,
     }
 
 

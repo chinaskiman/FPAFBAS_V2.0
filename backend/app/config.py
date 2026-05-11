@@ -21,6 +21,14 @@ class SetupsConfig(BaseModel):
     setup_candle: bool
 
 
+class RulesConfig(BaseModel):
+    hwc_filter: bool = True
+    di_peak_filter: bool = True
+    volume_spike_filter: bool = True
+    fakeout_volume_filter: bool = True
+    pullback_volume_filter: bool = True
+
+
 class LevelOverrides(BaseModel):
     add: List[float] = Field(default_factory=list)
     disable: List[float] = Field(default_factory=list)
@@ -38,6 +46,7 @@ class SymbolConfig(BaseModel):
     enabled: bool
     entry_tfs: List[EntryTF] = Field(min_length=1)
     setups: SetupsConfig
+    rules: RulesConfig = Field(default_factory=RulesConfig)
     levels: LevelsConfig
 
     @field_validator("symbol", mode="before")

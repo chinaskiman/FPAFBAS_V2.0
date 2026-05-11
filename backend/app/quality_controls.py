@@ -34,7 +34,7 @@ def score_signal(signal: Dict[str, Any]) -> Tuple[int, Dict[str, bool], List[str
     context = signal.get("context") or {}
     direction = signal.get("direction")
 
-    vol_ok = context.get("vol_ma5_slope_ok") is True
+    vol_ok = context.get("volume_spike_ok") is True or context.get("vol_ma5_slope_ok") is True
     pullback_ok = context.get("pullback_vol_decline") is True
     if direction == "long":
         di_ok = context.get("not_at_peak_long") is True
@@ -49,7 +49,10 @@ def score_signal(signal: Dict[str, Any]) -> Tuple[int, Dict[str, bool], List[str
     reasons: List[str] = []
     if vol_ok:
         score += 25
-        reasons.append("vol_ma5_slope_ok")
+        if context.get("volume_spike_ok") is True:
+            reasons.append("volume_spike_ok")
+        else:
+            reasons.append("vol_ma5_slope_ok")
     if pullback_ok:
         score += 15
         reasons.append("pullback_vol_decline")

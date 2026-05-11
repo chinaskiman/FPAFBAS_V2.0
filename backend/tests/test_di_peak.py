@@ -51,7 +51,7 @@ def test_di_peak_endpoint() -> None:
         payload = resp.json()
         assert payload["di_plus"]["is_peak"] is True
         assert payload["di_minus"]["is_peak"] is False
-        assert payload["not_at_peak_long"] is True
-        assert payload["not_at_peak_short"] is False
+        assert payload["not_at_peak_long"] is False
+        assert payload["not_at_peak_short"] is True
         assert payload["adx14_last"] == 30.0
         assert payload["timestamp"] == 3000

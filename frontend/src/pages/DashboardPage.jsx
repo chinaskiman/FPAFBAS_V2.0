@@ -179,6 +179,13 @@ export default function DashboardPage({ view = "dashboard" }) {
 
   const watchlistTfOptions = ["15m", "1h", "4h", "1d"];
   const watchlistDefaultTfs = ["15m", "1h", "4h"];
+  const watchlistRuleOptions = [
+    ["hwc_filter", "HWC"],
+    ["di_peak_filter", "DI"],
+    ["volume_spike_filter", "Vol"],
+    ["fakeout_volume_filter", "Fake vol"],
+    ["pullback_volume_filter", "Pullback"]
+  ];
   const watchlistItems = useMemo(() => {
     if (!Array.isArray(watchlist?.symbols)) {
       return [];
@@ -1097,6 +1104,26 @@ export default function DashboardPage({ view = "dashboard" }) {
     }
   };
 
+  const handleToggleWatchlistRule = async (symbol, ruleKey) => {
+    if (!watchlist) {
+      return;
+    }
+    setWatchlistFormError("");
+    setWatchlistSaveStatus("");
+    const updated = structuredClone(watchlist);
+    const entry = updated.symbols?.find((item) => item.symbol === symbol);
+    if (!entry) {
+      return;
+    }
+    entry.rules = normalizeWatchlistRules(entry.rules);
+    entry.rules[ruleKey] = !entry.rules[ruleKey];
+    try {
+      await saveWatchlist(updated);
+    } catch (err) {
+      setWatchlistFormError(err instanceof Error ? err.message : "Failed to save watchlist.");
+    }
+  };
+
   const handleSaveQuality = async () => {
     if (!qualitySettings) {
       return;
@@ -1448,6 +1475,7 @@ export default function DashboardPage({ view = "dashboard" }) {
                   <th>Pick</th>
                   <th>Symbol</th>
                   <th>Entry TFs</th>
+                  <th>Rules</th>
                   <th>Enabled</th>
                   <th />
                 </tr>
@@ -1455,7 +1483,7 @@ export default function DashboardPage({ view = "dashboard" }) {
               <tbody>
                 {filteredWatchlistItems.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="muted">
+                    <td colSpan={6} className="muted">
                       No symbols match the filter.
                     </td>
                   </tr>
@@ -1485,6 +1513,23 @@ export default function DashboardPage({ view = "dashboard" }) {
                                 onChange={() => handleToggleWatchlistEntryTf(item.symbol, tf)}
                               />
                               <span>{tf}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="inline-form inline-form-tight">
+                        {watchlistRuleOptions.map(([ruleKey, label]) => {
+                          const rules = normalizeWatchlistRules(item.rules);
+                          return (
+                            <label key={`wl-${item.symbol}-${ruleKey}`} className="checkbox">
+                              <input
+                                type="checkbox"
+                                checked={rules[ruleKey]}
+                                onChange={() => handleToggleWatchlistRule(item.symbol, ruleKey)}
+                              />
+                              <span>{label}</span>
                             </label>
                           );
                         })}
@@ -4431,6 +4476,7 @@ function buildWatchlistSymbolEntry(template, symbol, entryTfs) {
   const setups = template?.setups
     ? structuredClone(template.setups)
     : { continuation: true, retest: true, fakeout: true, setup_candle: true };
+  const rules = normalizeWatchlistRules(template?.rules);
   const levels = template?.levels
     ? structuredClone(template.levels)
     : { auto: true, max_levels: 12, cluster_tol_pct: 0.003, overrides: { add: [], disable: [] } };
@@ -4440,7 +4486,18 @@ function buildWatchlistSymbolEntry(template, symbol, entryTfs) {
     enabled: true,
     entry_tfs: entryTfs,
     setups,
+    rules,
     levels
+  };
+}
+
+function normalizeWatchlistRules(rules) {
+  return {
+    hwc_filter: rules?.hwc_filter ?? true,
+    di_peak_filter: rules?.di_peak_filter ?? true,
+    volume_spike_filter: rules?.volume_spike_filter ?? true,
+    fakeout_volume_filter: rules?.fakeout_volume_filter ?? true,
+    pullback_volume_filter: rules?.pullback_volume_filter ?? true
   };
 }
 

@@ -44,6 +44,30 @@ def _make_candle(idx: int, close: float, high: float, low: float) -> Candle:
     )
 
 
+def _make_candle_with_volume(idx: int, close: float, high: float, low: float, volume: float) -> Candle:
+    open_time = idx * 60_000
+    close_time = open_time + 59_999
+    return Candle(
+        open_time=open_time,
+        close_time=close_time,
+        open=close,
+        high=high,
+        low=low,
+        close=close,
+        volume=volume,
+    )
+
+
+def _cache_candles_from_series(highs, lows):
+    return [_make_candle(idx, close=(high + low) / 2, high=high, low=low) for idx, (high, low) in enumerate(zip(highs, lows))]
+
+
+def _bullish_htf_candles():
+    highs = [1, 2, 3, 6, 4, 3, 2, 7, 4, 3, 2]
+    lows = [6, 5, 4, 2, 3, 4, 5, 3, 4, 5, 6]
+    return _cache_candles_from_series(highs, lows)
+
+
 def _make_watchlist(pinned=None) -> WatchlistConfig:
     return WatchlistConfig.model_validate(
         {
@@ -146,3 +170,35 @@ def test_replay_output_stable() -> None:
         warmup=0,
     )
     assert result1["items"] == result2["items"]
+
+
+def test_replay_step_keeps_skipped_signal_candles() -> None:
+    level = 100.0
+    closes = [95, 96, 97, 98, 99, 99, 99, 99, 99, 101, 102, 103]
+    candles = [
+        _make_candle_with_volume(
+            idx,
+            close,
+            high=close + 1,
+            low=close - 1,
+            volume=3 if idx == 9 else 1,
+        )
+        for idx, close in enumerate(closes)
+    ]
+    htf = _bullish_htf_candles()
+    ingest = FakeIngest({"1h": candles, "4h": htf, "1d": htf, "1w": htf})
+    config = _make_watchlist(pinned=[level])
+    result = replay_run(
+        ingest,
+        config,
+        "BTCUSDT",
+        "1h",
+        from_ms=candles[0].close_time,
+        to_ms=candles[-1].close_time,
+        step=2,
+        warmup=0,
+    )
+
+    signal_items = [item for item in result["items"] if item.get("signals")]
+    assert any(item["index"] == 9 for item in signal_items)
+    assert any(signal["type"] == "break" for item in signal_items for signal in item["signals"])

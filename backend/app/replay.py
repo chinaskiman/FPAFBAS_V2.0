@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import bisect
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 from .candle_cache import Candle
 from .di_peak import DI_PEAK_WINDOW_DEFAULT, compute_di_peak_flags
@@ -11,6 +11,7 @@ from .indicators import atr, dmi_adx, rsi, sma
 from .level_events import detect_level_events
 from .levels import HTF_TFS, apply_overrides, compute_levels
 from .rsi_filters import atr_multiplier_from_rsi, rsi_distance_from_50
+from .signal_builder import build_signals_from_state
 from .setup_candles import detect_setup_candles
 from .volume_filters import compute_pullback_vol_decline, compute_vol_metrics
 
@@ -58,9 +59,12 @@ def replay_run(
     )
     if symbol_config is None:
         raise ValueError("Symbol not found in watchlist")
+    rules = symbol_config.rules.model_dump()
+    setups = symbol_config.setups.model_dump()
 
     items: List[dict] = []
-    for idx in range(start_offset, len(candles), max(step, 1)):
+    step_size = max(step, 1)
+    for idx in range(start_offset, len(candles)):
         window = candles[: idx + 1]
         last = window[-1]
         last_time = last.close_time
@@ -83,15 +87,12 @@ def replay_run(
         merged = apply_overrides(auto_levels, overrides.add, overrides.disable, tol_pct_used)
         final_levels = merged["final_levels"]
 
-        events = detect_level_events(window, final_levels)
-
         closes = [candle.close for candle in window]
         highs = [candle.high for candle in window]
         lows = [candle.low for candle in window]
         volumes = [candle.volume for candle in window]
 
         sma7 = sma(closes, 7)
-        setup_items = detect_setup_candles(window, sma7, events, sl_buffer_pct=0.0015)
 
         rsi_series = rsi(closes, 14)
         atr_series = atr(highs, lows, closes, 5)
@@ -99,8 +100,8 @@ def replay_run(
 
         di_plus_flags = compute_di_peak_flags(di_plus, window=DI_PEAK_WINDOW_DEFAULT)
         di_minus_flags = compute_di_peak_flags(di_minus, window=DI_PEAK_WINDOW_DEFAULT)
-        not_at_peak_long = not di_minus_flags["is_peak"]
-        not_at_peak_short = not di_plus_flags["is_peak"]
+        not_at_peak_long = not di_plus_flags["is_peak"]
+        not_at_peak_short = not di_minus_flags["is_peak"]
 
         vol_metrics = compute_vol_metrics(volumes, window_ma=10, window_ma5=5)
         pullback_decline = compute_pullback_vol_decline(volumes, k=3)
@@ -125,6 +126,8 @@ def replay_run(
 
         context = {
             "vol_ma5_slope_ok": vol_metrics["vol_ma5_slope_ok"],
+            "vol_highest10": vol_metrics["vol_highest10"],
+            "volume_spike_ok": vol_metrics["vol_highest10"],
             "pullback_vol_decline": pullback_decline,
             "not_at_peak_long": not_at_peak_long,
             "not_at_peak_short": not_at_peak_short,
@@ -134,9 +137,17 @@ def replay_run(
             "hwc_bias": hwc_bias,
             "weekly_bias": weekly_bias,
             "daily_bias": daily_bias,
+            "rules": rules,
+            "setups": setups,
         }
 
-        signals = _build_openings_from_window(
+        fakeout_volume_series = None
+        if not symbol_config.rules.fakeout_volume_filter:
+            fakeout_volume_series = [True] * len(window)
+        events = detect_level_events(window, final_levels, slope_ok_series=fakeout_volume_series)
+        setup_items = detect_setup_candles(window, sma7, events, sl_buffer_pct=0.0015)
+
+        signals = build_signals_from_state(
             window,
             events,
             setup_items,
@@ -164,12 +175,16 @@ def replay_run(
             "daily_bias": daily_bias,
             "filters": {
                 "vol_ok": vol_metrics["vol_ma5_slope_ok"],
+                "volume_spike_ok": vol_metrics["vol_highest10"],
                 "di_ok": not_at_peak_long and not_at_peak_short,
                 "rsi_ok": rsi_distance is not None,
                 "atr_ok": atr_stop_distance is not None,
             },
         }
-        items.append(item)
+        should_sample = ((idx - start_offset) % step_size) == 0
+        is_last = idx == len(candles) - 1
+        if should_sample or signals or is_last:
+            items.append(item)
 
     return {
         "symbol": symbol_upper,
@@ -223,164 +238,6 @@ def replay_summary(result: dict) -> dict:
         "by_direction": by_direction,
         "filter_pass": filter_pass,
         "by_day": [{"day": day, "signals": count} for day, count in sorted(by_day.items())],
-    }
-
-
-def _build_openings_from_window(
-    candles: List[Candle],
-    events: List[dict],
-    setup_items: List[dict],
-    context: dict,
-    atr_stop_distance: Optional[float],
-) -> List[dict]:
-    last_candle_time = candles[-1].close_time if candles else None
-    if not candles:
-        return []
-
-    signals: List[dict] = []
-    break_levels = set()
-    for event in events:
-        last_break = event.get("last_break")
-        if not last_break or last_break.get("time") != last_candle_time:
-            continue
-        if event.get("direction") == "up":
-            direction = "long"
-        elif event.get("direction") == "down":
-            direction = "short"
-        else:
-            continue
-        if not context.get("vol_ma5_slope_ok"):
-            continue
-        di_ok = context.get("not_at_peak_long") if direction == "long" else context.get("not_at_peak_short")
-        if not di_ok:
-            continue
-        break_index = last_break.get("index")
-        candle = candles[break_index] if break_index is not None and break_index < len(candles) else None
-        entry = last_break["close"]
-        sl = None
-        if atr_stop_distance is not None:
-            sl = entry - atr_stop_distance if direction == "long" else entry + atr_stop_distance
-        signals.append(
-            _signal_payload(
-                {
-                    "type": "break",
-                    "level": event.get("level"),
-                    "direction": direction,
-                    "time": last_break["time"],
-                    "entry": entry,
-                    "sl": sl,
-                    "sl_reason": "atr_stop",
-                },
-                candle,
-                {
-                    "break_index": break_index,
-                    "retest_index": event.get("retest_index"),
-                    "fakeout_index": event.get("last_fakeout", {}).get("index") if event.get("last_fakeout") else None,
-                },
-                None,
-                context,
-            )
-        )
-        break_levels.add(event.get("level"))
-
-    for item in setup_items:
-        if item.get("time") != last_candle_time:
-            continue
-        if item.get("level") in break_levels:
-            continue
-        setup_index = item.get("setup_index")
-        candle = candles[setup_index] if setup_index is not None and setup_index < len(candles) else None
-        level_event = item.get("level_event") or {}
-        signals.append(
-            _signal_payload(
-                {
-                    "type": "setup",
-                    "level": item.get("level"),
-                    "direction": item.get("direction"),
-                    "time": item.get("time"),
-                    "entry": item.get("entry"),
-                    "sl": item.get("sl"),
-                    "sl_reason": "setup_candle",
-                },
-                candle,
-                {
-                    "break_index": level_event.get("break_index"),
-                    "retest_index": level_event.get("retest_index"),
-                    "fakeout_index": level_event.get("fakeout_index"),
-                },
-                setup_index,
-                context,
-            )
-        )
-
-    for event in events:
-        last_fakeout = event.get("last_fakeout")
-        if not last_fakeout or last_fakeout.get("time") != last_candle_time:
-            continue
-        break_direction = event.get("direction")
-        if break_direction == "up":
-            direction = "short"
-        elif break_direction == "down":
-            direction = "long"
-        else:
-            continue
-        idx = last_fakeout.get("index")
-        if idx is None or idx >= len(candles):
-            continue
-        candle = candles[idx]
-        if direction == "short":
-            sl = candle.high * (1 + 0.0015)
-        else:
-            sl = candle.low * (1 - 0.0015)
-        signals.append(
-            _signal_payload(
-                {
-                    "type": "fakeout",
-                    "level": event.get("level"),
-                    "direction": direction,
-                    "time": last_fakeout.get("time"),
-                    "entry": last_fakeout.get("close"),
-                    "sl": sl,
-                    "sl_reason": "fakeout_extreme",
-                },
-                candle,
-                {
-                    "break_index": event.get("last_break", {}).get("index") if event.get("last_break") else None,
-                    "retest_index": event.get("retest_index"),
-                    "fakeout_index": idx,
-                },
-                None,
-                context,
-            )
-        )
-
-    return signals
-
-
-def _signal_payload(
-    base: dict,
-    candle: Optional[Candle],
-    level_event: dict,
-    setup_index: Optional[int],
-    context: dict,
-) -> dict:
-    trigger = None
-    if candle is not None:
-        trigger = {
-            "open": candle.open,
-            "high": candle.high,
-            "low": candle.low,
-            "close": candle.close,
-            "volume": candle.volume,
-        }
-    return {
-        **base,
-        "candle": candle.to_dict() if candle else None,
-        "level_event": level_event,
-        "context": context,
-        "trigger_candle": trigger,
-        "level_event_indices": level_event,
-        "setup_index": setup_index,
     }
 
 

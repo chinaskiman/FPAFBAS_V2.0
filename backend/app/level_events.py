@@ -21,6 +21,20 @@ def compute_vol_ma5_slope_pct_series(volumes: Iterable[float], window: int = 5) 
     return slope_pct
 
 
+def compute_fakeout_volume_ok_series(volumes: Iterable[float], window: int = 10) -> List[bool]:
+    series = list(volumes)
+    vol_ma = sma(series, window)
+    result = [False] * len(series)
+    for idx, volume in enumerate(series):
+        if idx == 0 or idx >= len(vol_ma):
+            continue
+        ma_value = vol_ma[idx]
+        if ma_value is None:
+            continue
+        result[idx] = volume > series[idx - 1] and volume > ma_value
+    return result
+
+
 def detect_level_events(
     candles: List[Candle],
     levels: Iterable[float],
@@ -32,11 +46,8 @@ def detect_level_events(
         return []
     levels_list = list(levels)
     volumes = [candle.volume for candle in candles]
-    slope_pct_series = compute_vol_ma5_slope_pct_series(volumes)
     if slope_ok_series is None:
-        slope_ok_series = [
-            value is not None and value > 1.8 for value in slope_pct_series
-        ]
+        slope_ok_series = compute_fakeout_volume_ok_series(volumes)
 
     events: List[dict] = []
 

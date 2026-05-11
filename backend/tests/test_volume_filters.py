@@ -10,6 +10,7 @@ def test_volume_ratio_math() -> None:
     assert metrics["vol_last"] == 20
     assert metrics["vol_ma10_last"] == 11
     assert metrics["vol_ratio"] == 20 / 11
+    assert metrics["vol_highest10"] is True
 
 
 def test_vol_ma5_slope() -> None:
@@ -24,6 +25,7 @@ def test_vol_ma5_slope_insufficient() -> None:
     metrics = compute_vol_metrics(volumes, window_ma=10, window_ma5=5)
     assert metrics["vol_ma5_slope_pct"] is None
     assert metrics["vol_ma5_slope_ok"] is False
+    assert metrics["vol_highest10"] is False
 
 
 def test_vol_ma5_slope_prev_zero() -> None:
@@ -31,6 +33,7 @@ def test_vol_ma5_slope_prev_zero() -> None:
     metrics = compute_vol_metrics(volumes, window_ma=10, window_ma5=5)
     assert metrics["vol_ma5_slope_pct"] is None
     assert metrics["vol_ma5_slope_ok"] is False
+    assert metrics["vol_highest10"] is True
 
 
 def test_pullback_decline_true() -> None:
@@ -74,4 +77,6 @@ def test_volume_endpoint() -> None:
         assert payload["tf"] == "15m"
         assert "vol_ratio" in payload
         assert "vol_ma5_slope_pct" in payload
+        assert "vol_highest10" in payload
+        assert "volume_spike_ok" in payload
         assert "pullback_vol_decline" in payload

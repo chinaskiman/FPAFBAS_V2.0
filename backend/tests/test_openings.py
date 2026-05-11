@@ -68,18 +68,25 @@ class FakeIngest:
         return None
 
 
-def _watchlist(tmp_path: Path, level: float) -> dict:
+def _watchlist(tmp_path: Path, level: float, rules: dict | None = None, setups: dict | None = None) -> dict:
     watchlist = {
         "symbols": [
             {
                 "symbol": "BTCUSDT",
                 "enabled": True,
                 "entry_tfs": ["15m", "1h"],
-                "setups": {
+                "setups": setups or {
                     "continuation": True,
                     "retest": True,
                     "fakeout": True,
                     "setup_candle": True,
+                },
+                "rules": rules or {
+                    "hwc_filter": True,
+                    "di_peak_filter": True,
+                    "volume_spike_filter": True,
+                    "fakeout_volume_filter": True,
+                    "pullback_volume_filter": True,
                 },
                 "levels": {
                     "auto": True,
@@ -96,7 +103,7 @@ def _watchlist(tmp_path: Path, level: float) -> dict:
     return watchlist
 
 
-def test_hwc_neutral_is_recorded_not_used_as_gate(monkeypatch, tmp_path) -> None:
+def test_hwc_neutral_suppresses_signals(monkeypatch, tmp_path) -> None:
     level = 100.0
     watchlist = _watchlist(tmp_path, level)
     monkeypatch.setenv("WATCHLIST_PATH", str(tmp_path / "watchlist.json"))
@@ -123,12 +130,75 @@ def test_hwc_neutral_is_recorded_not_used_as_gate(monkeypatch, tmp_path) -> None
     assert result["hwc_bias"] == "neutral"
     assert result["weekly_bias"] == "neutral"
     assert result["daily_bias"] == "neutral"
+    assert result["signals"] == []
+
+
+def test_symbol_rule_can_disable_hwc_filter(monkeypatch, tmp_path) -> None:
+    level = 100.0
+    rules = {
+        "hwc_filter": False,
+        "di_peak_filter": True,
+        "volume_spike_filter": True,
+        "fakeout_volume_filter": True,
+        "pullback_volume_filter": True,
+    }
+    watchlist = _watchlist(tmp_path, level, rules=rules)
+    monkeypatch.setenv("WATCHLIST_PATH", str(tmp_path / "watchlist.json"))
+
+    tf_cache = CandleCache(maxlen=2000)
+    volumes = [1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
+    closes = [95, 96, 97, 98, 99, 99, 99, 99, 99, 101]
+    for idx, close in enumerate(closes):
+        tf_cache.append(_make_candle(idx, close, high=close + 1, low=close - 1, volume=volumes[idx]))
+    neutral_cache = CandleCache(maxlen=2000)
+    ingest = FakeIngest(tf_cache, neutral_cache, neutral_cache)
+    ingest.set_indicators(
+        {
+            "candles": [],
+            "rsi14": [60.0] * len(closes),
+            "atr5": [2.0] * len(closes),
+            "di_plus": list(range(30, 30 - len(closes), -1)),
+            "di_minus": [10.0] * len(closes),
+            "sma7": [None] * len(closes),
+        }
+    )
+    config = WatchlistConfig.model_validate(watchlist)
+    result = build_openings(ingest, config, "BTCUSDT", "15m", limit=10)
     assert any(signal["type"] == "break" for signal in result["signals"])
-    for signal in result["signals"]:
-        ctx = signal.get("context") or {}
-        assert ctx.get("hwc_bias") == "neutral"
-        assert ctx.get("weekly_bias") == "neutral"
-        assert ctx.get("daily_bias") == "neutral"
+
+
+def test_symbol_rule_can_disable_di_peak_filter(monkeypatch, tmp_path) -> None:
+    level = 100.0
+    rules = {
+        "hwc_filter": True,
+        "di_peak_filter": False,
+        "volume_spike_filter": True,
+        "fakeout_volume_filter": True,
+        "pullback_volume_filter": True,
+    }
+    watchlist = _watchlist(tmp_path, level, rules=rules)
+    monkeypatch.setenv("WATCHLIST_PATH", str(tmp_path / "watchlist.json"))
+
+    tf_cache = CandleCache(maxlen=2000)
+    volumes = [1, 1, 1, 1, 1, 1, 1, 1, 1, 3]
+    closes = [95, 96, 97, 98, 99, 99, 99, 99, 99, 101]
+    for idx, close in enumerate(closes):
+        tf_cache.append(_make_candle(idx, close, high=close + 1, low=close - 1, volume=volumes[idx]))
+
+    ingest = FakeIngest(tf_cache, _bullish_htf(), _bullish_htf())
+    ingest.set_indicators(
+        {
+            "candles": [],
+            "rsi14": [60.0] * len(closes),
+            "atr5": [2.0] * len(closes),
+            "di_plus": [30.0] * len(closes),
+            "di_minus": [10.0] * len(closes),
+            "sma7": [None] * len(closes),
+        }
+    )
+    config = WatchlistConfig.model_validate(watchlist)
+    result = build_openings(ingest, config, "BTCUSDT", "15m", limit=10)
+    assert any(signal["type"] == "break" for signal in result["signals"])
 
 
 def test_break_signal_strong_momentum(monkeypatch, tmp_path) -> None:
@@ -137,7 +207,7 @@ def test_break_signal_strong_momentum(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("WATCHLIST_PATH", str(tmp_path / "watchlist.json"))
 
     tf_cache = CandleCache(maxlen=2000)
-    volumes = [1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
+    volumes = [1, 1, 1, 1, 1, 1, 1, 1, 1, 3]
     closes = [95, 96, 97, 98, 99, 99, 99, 99, 99, 101]
     for idx, close in enumerate(closes):
         tf_cache.append(_make_candle(idx, close, high=close + 1, low=close - 1, volume=volumes[idx]))
@@ -175,7 +245,8 @@ def test_break_suppressed_when_no_momentum(monkeypatch, tmp_path) -> None:
     tf_cache = CandleCache(maxlen=2000)
     closes = [95, 96, 97, 98, 99, 99, 99, 99, 99, 101]
     for idx, close in enumerate(closes):
-        tf_cache.append(_make_candle(idx, close, high=close + 1, low=close - 1, volume=1))
+        volume = 1 if idx == len(closes) - 1 else 2
+        tf_cache.append(_make_candle(idx, close, high=close + 1, low=close - 1, volume=volume))
 
     ingest = FakeIngest(tf_cache, _bullish_htf(), _bullish_htf())
     ingest.set_indicators(
@@ -199,7 +270,7 @@ def test_fakeout_signal(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("WATCHLIST_PATH", str(tmp_path / "watchlist.json"))
 
     tf_cache = CandleCache(maxlen=2000)
-    volumes = [1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
+    volumes = [1, 1, 1, 1, 1, 1, 1, 1, 1, 3]
     closes = [95, 96, 97, 98, 99, 101, 100, 100, 100, 99]
     highs = [c + 1 for c in closes]
     lows = [c - 1 for c in closes]

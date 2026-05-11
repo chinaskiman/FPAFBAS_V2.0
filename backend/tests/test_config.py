@@ -38,6 +38,7 @@ def test_load_watchlist_success(monkeypatch, tmp_path) -> None:
     cfg = load_watchlist(get_watchlist_path())
     assert cfg.symbols
     assert cfg.global_.cooldown_minutes == 60
+    assert cfg.symbols[0].rules.di_peak_filter is True
 
 
 def test_invalid_entry_tf_rejected() -> None:

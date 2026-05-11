@@ -300,7 +300,9 @@ def format_alert_message(alert: dict) -> str:
         di_ok = context.get("not_at_peak_short")
     else:
         di_ok = None
-    vol_ok = context.get("vol_ma5_slope_ok")
+    vol_ok = context.get("volume_spike_ok")
+    if vol_ok is None:
+        vol_ok = context.get("vol_ma5_slope_ok")
     pullback_ok = context.get("pullback_vol_decline")
     rsi_distance = context.get("rsi_distance")
     atr_stop_distance = context.get("atr_stop_distance")

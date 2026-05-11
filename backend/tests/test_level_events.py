@@ -89,6 +89,47 @@ def test_fakeout_window_expired() -> None:
     assert event["last_fakeout"] is None
 
 
+def test_fakeout_default_volume_rule_requires_increasing_above_ma10() -> None:
+    level = 100.0
+    candles = [
+        _make_candle(0, 98, 99, 97, 1),
+        _make_candle(1, 99, 100, 98, 1),
+        _make_candle(2, 99, 100, 98, 1),
+        _make_candle(3, 99, 100, 98, 1),
+        _make_candle(4, 99, 100, 98, 1),
+        _make_candle(5, 99, 100, 98, 1),
+        _make_candle(6, 99, 100, 98, 1),
+        _make_candle(7, 99, 100, 98, 1),
+        _make_candle(8, 101, 102, 100, 1),  # break up
+        _make_candle(9, 102, 103, 99, 1),   # retest wick
+        _make_candle(10, 99, 100, 98, 2),   # back inside with vol > prev and > MA10
+    ]
+    events = detect_level_events(candles, [level])
+    event = events[0]
+    assert event["last_fakeout"] is not None
+    assert event["last_fakeout"]["index"] == 10
+
+
+def test_fakeout_default_volume_rule_rejects_flat_volume() -> None:
+    level = 100.0
+    candles = [
+        _make_candle(0, 98, 99, 97, 1),
+        _make_candle(1, 99, 100, 98, 1),
+        _make_candle(2, 99, 100, 98, 1),
+        _make_candle(3, 99, 100, 98, 1),
+        _make_candle(4, 99, 100, 98, 1),
+        _make_candle(5, 99, 100, 98, 1),
+        _make_candle(6, 99, 100, 98, 1),
+        _make_candle(7, 99, 100, 98, 1),
+        _make_candle(8, 101, 102, 100, 1),
+        _make_candle(9, 102, 103, 99, 1),
+        _make_candle(10, 99, 100, 98, 1),
+    ]
+    events = detect_level_events(candles, [level])
+    event = events[0]
+    assert event["last_fakeout"] is None
+
+
 class FakeIngest:
     def __init__(self, candles):
         self._caches = {
