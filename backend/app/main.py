@@ -922,6 +922,8 @@ def api_levels(symbol: str, debug: int = 0) -> dict:
                     "touches": cluster.get("touches"),
                     "strength": cluster.get("strength"),
                     "rank_score": cluster.get("rank_score"),
+                    "tf_authority_score": cluster.get("tf_authority_score"),
+                    "tf_counts": cluster.get("tf_counts"),
                     "last_touch_index": cluster.get("last_touch_index"),
                     "rejections": cluster.get("rejections"),
                     "last_rejection_index": cluster.get("last_rejection_index"),

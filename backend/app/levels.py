@@ -30,6 +30,8 @@ SR_MIN_STRENGTH = 0.62
 SR_MIN_TOUCH_EVENTS = 2
 SR_MIN_REJECTIONS = 0
 MIN_SPACING_PCT_MULT = 1.0
+TF_AUTHORITY_WEIGHTS = {"1w": 1.0, "1d": 0.75, "4h": 0.45}
+TF_AUTHORITY_DIVERSITY_BONUS = 0.08
 
 
 def compute_levels(
@@ -293,6 +295,23 @@ def _cluster_from_members(members: List[dict]) -> dict:
     }
 
 
+def _compute_tf_authority(cluster: dict) -> tuple[dict, float]:
+    members = cluster.get("members") or []
+    counts = {tf: 0 for tf in HTF_TFS}
+    for member in members:
+        tf = member.get("tf")
+        if tf in counts:
+            counts[tf] += 1
+
+    active_tfs = [tf for tf, count in counts.items() if count > 0]
+    if not active_tfs:
+        return counts, 0.0
+
+    max_authority = max(TF_AUTHORITY_WEIGHTS.get(tf, 0.0) for tf in active_tfs)
+    diversity_bonus = TF_AUTHORITY_DIVERSITY_BONUS * max(0, len(active_tfs) - 1)
+    return counts, _clamp01(max_authority + diversity_bonus)
+
+
 def _within_any(value: float, reference: List[float], tol_pct: float) -> bool:
     for item in reference:
         if item == 0:
@@ -467,6 +486,7 @@ def score_clusters(
             cluster["last_touch_limit"] = len(score_candles)
 
         touch_score = 1.0 - math.exp(-touch_events / TOUCH_CAP) if touch_events > 0 else 0.0
+        tf_counts, tf_authority_score = _compute_tf_authority(cluster)
 
         last_touch_index = cluster.get("last_touch_index", 0)
         last_touch_limit = cluster.get("last_touch_limit", 1)
@@ -485,11 +505,13 @@ def score_clusters(
         )
         rej_score = 1.0 - math.exp(-rejections / 6.0) if rejections > 0 else 0.0
         flip_score = 1.0 - math.exp(-flips / 2.0) if flips > 0 else 0.0
-        strength = _clamp01(base_strength + 0.10 * rej_score + 0.18 * flip_score)
+        strength = _clamp01(base_strength + 0.10 * rej_score + 0.18 * flip_score + 0.12 * tf_authority_score)
         cluster["recency_score"] = recency_score
         cluster["rejection_score"] = avg_rejection_strength
         cluster["strength"] = strength
         cluster["base_strength"] = base_strength
+        cluster["tf_counts"] = tf_counts
+        cluster["tf_authority_score"] = tf_authority_score
         cluster["touches"] = touch_events
         cluster["touch_events"] = touch_events
         cluster["avg_rejection_strength"] = avg_rejection_strength
@@ -564,8 +586,12 @@ def assign_rank_scores(
             now_index = (limit - 1) if isinstance(limit, int) and limit > 0 else last_touch_index
         age = max(0, now_index - last_touch_index)
         recency = 1.0 / (1.0 + age)
+        tf_authority_score = cluster.get("tf_authority_score")
+        if tf_authority_score is None:
+            _, tf_authority_score = _compute_tf_authority(cluster)
+            cluster["tf_authority_score"] = tf_authority_score
 
-        rank_score = 0.60 * strength + 0.25 * recency + 0.15 * distance_score
+        rank_score = 0.50 * strength + 0.20 * tf_authority_score + 0.20 * recency + 0.10 * distance_score
         cluster["rank_score"] = _clamp01(rank_score)
     return clusters
 
@@ -937,6 +963,8 @@ def build_levels_detailed(
                 "last_rejection_index": match.get("last_rejection_index") if match else None,
                 "last_flip_index": match.get("last_flip_index") if match else None,
                 "score_tf_used": match.get("score_tf_used") if match else None,
+                "tf_authority_score": match.get("tf_authority_score") if match else 0.0,
+                "tf_counts": match.get("tf_counts") if match else {tf: 0 for tf in HTF_TFS},
             }
         )
     return details

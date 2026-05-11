@@ -556,3 +556,29 @@ def test_unlimited_levels_returns_strong_zones(monkeypatch) -> None:
     auto_levels, _selected, _clusters, meta = levels.compute_levels({"4h": candles}, tol_pct=0.005, max_levels=0)
     assert len(auto_levels) == 2
     assert meta["clusters_after_filter"] == 2
+
+
+def test_higher_timeframe_authority_lifts_level_rank() -> None:
+    clusters = [
+        {
+            "center": 99.0,
+            "members": [{"price": 99.0, "tf": "4h", "ts": 0, "index": 10, "series_len": 20}],
+            "last_touch_index": 10,
+            "last_touch_limit": 20,
+        },
+        {
+            "center": 101.0,
+            "members": [{"price": 101.0, "tf": "1w", "ts": 0, "index": 10, "series_len": 20}],
+            "last_touch_index": 10,
+            "last_touch_limit": 20,
+        },
+    ]
+
+    scored = score_clusters(clusters, {}, 0.003)
+    ranked = assign_rank_scores(scored, 100.0, {})
+    four_hour = next(cluster for cluster in ranked if cluster["center"] == 99.0)
+    weekly = next(cluster for cluster in ranked if cluster["center"] == 101.0)
+
+    assert weekly["tf_counts"] == {"1w": 1, "1d": 0, "4h": 0}
+    assert weekly["tf_authority_score"] > four_hour["tf_authority_score"]
+    assert weekly["rank_score"] > four_hour["rank_score"]
