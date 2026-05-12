@@ -49,7 +49,7 @@ from .quality_controls import score_signal
 from .alert_poller import AlertPoller
 from .notifier import TelegramNotifier
 from .quality_controls import QualitySettings
-from .replay import replay_run, replay_summary
+from .replay import replay_performance_report, replay_run, replay_summary
 from .forward_test import ForwardTestService
 
 
@@ -1327,6 +1327,48 @@ def api_replay_summary(
         }
     )
     return summary
+
+
+@app.get("/api/replay_performance/{symbol}/{tf}")
+def api_replay_performance(
+    symbol: str,
+    tf: str,
+    from_ms: int,
+    to_ms: int,
+    warmup: int = 300,
+    debug: int = 0,
+) -> dict:
+    ingest = getattr(app.state, "ingest", None)
+    if ingest is None:
+        raise HTTPException(status_code=503, detail="Ingestion not initialized")
+    if from_ms >= to_ms:
+        raise HTTPException(status_code=400, detail="from_ms must be < to_ms")
+    config = load_watchlist()
+    try:
+        result = replay_run(
+            ingest,
+            config,
+            symbol,
+            tf,
+            from_ms=from_ms,
+            to_ms=to_ms,
+            step=1,
+            warmup=warmup,
+            include_debug=bool(debug),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    report = replay_performance_report(result)
+    report.update(
+        {
+            "symbol": symbol.upper(),
+            "tf": tf,
+            "from_ms": from_ms,
+            "to_ms": to_ms,
+            "step": 1,
+        }
+    )
+    return report
 
 
 @app.get("/api/debug/pivots/{symbol}/{tf}")

@@ -33,7 +33,7 @@ Setup rules:
 •	Break confirmation: any candle close beyond level
 •	Volume spike: break candle volume is highest of last 10 candles (entry TF)
 •	Continuation: only if volume spike + DI not at peak; otherwise wait retest/setup candle
-•	Retest: wick touch is enough; declining pullback volume; entry on close back in direction
+•	Retest: wick touch is enough; declining pullback volume; entry on close back in direction; SL beyond retest candle extreme + 0.15%
 •	Fake-out: window = 10 candles; increasing volume rule = (vol > prev) AND (vol > MA10); entry on close back inside; SL beyond fake extreme + 0.15%
 •	DI peak: Option 1 (DI S/R zones via DI pivots + clustering) with 3% proximity threshold
 •	Notifications: Telegram
@@ -41,6 +41,8 @@ Setup rules:
 6. Definitions
 •	Pivot (2L/2R): pivot high is higher than previous 2 highs and >= next 2 highs; pivot low is lower than previous 2 lows and <= next 2 lows.
 •	HWC direction: computed from Weekly + Daily Dow structure using recent pivots (HH/HL bullish, LL/LH bearish). Mixed/unclear => suppress alerts.
+•	MWC context: computed from Daily + 4H Dow structure using recent pivots. MWC is context only and does not suppress alerts by default.
+•	Quality grade: replay/reporting grade derived from signal quality score and W/D/4H/HWC/MWC alignment. A is strongest context, B is valid middle tier, C is weaker context.
 •	Cluster tolerance: levels within X% are grouped; cluster center = mean price.
 •	Buffer: 0.15% beyond swing HL/LH (used for stop references in alerts).
 7. Data Sources & Ingestion
@@ -81,6 +83,7 @@ Setup rules:
   - Wick tags level
   - Pullback volume declining
   - Alert on close back in direction
+  - SL beyond retest candle extreme + 0.15%
 •	Fake-out:
   - Break against HWC
   - Within 10 candles: retest volume increasing (vol>prev and vol>MA10)
@@ -90,20 +93,30 @@ Setup rules:
   - SMA 7/25/99
   - Wick >= 1.5× body (directional)
   - SMA7 behind candle body (per agreed definition)
+  - LONG: bullish body, lower wick is directional, SMA7 at/below body low
+  - SHORT: bearish body, upper wick is directional, SMA7 at/above body high
   - Alert on close; include SL note: other side of candle
 
 8.5 Telegram Alerts
 •	Standard message fields:
   - symbol, timeframe, setup type, direction
   - trigger level and close price
-  - 'why' fields (volume spike, DI peak pass, etc.)
+  - HWC/MWC context: Weekly, Daily, 4H, HWC, MWC
+  - 'why' fields (volume spike, DI peak pass, pullback volume, wick tag, etc.)
   - TradingView link
 
-8.6 Web UI (Minimal)
+8.6 Replay and Performance Reporting
+•	Replay runs the same signal pipeline candle-by-candle without lookahead.
+•	Replay summary includes backend performance metrics by setup type, symbol, timeframe, direction, HWC, MWC, and quality grade.
+•	Outcome tracking reports win/loss/open, realized R, maximum RR reached, maximum drawdown R, and time to SL/RR2/RR5/RR10.
+•	Quality grades A/B/C are used for analysis and prioritization; they are not hard filters by default.
+
+8.7 Web UI (Minimal)
 •	Dashboard: enabled symbols + last alerts.
 •	Watchlist: enable/disable symbols; choose entry TFs; toggle setups.
 •	Levels editor: add/pin; disable; view current overrides.
 •	Alerts log: filter/search by symbol/setup/TF/date.
+•	Replay UI: scrub candle-by-candle signals and review backend performance tables by setup type.
 9. Reliability, Performance, and Security
 Reliability
 •	Automatic reconnect on WebSocket disconnect.
@@ -124,13 +137,14 @@ Core signal correctness
 2) Continuation alert triggers only when: break-close + vol highest(10) + DI not at peak + HWC aligned.
 3) Retest alert requires wick tag + declining volume + close back in direction.
 4) Fake-out alert triggers only within 10 candles, with increasing volume condition, and closes back inside.
-5) Setup candle alert triggers on candle close when wick/body and SMA7-behind rules match.
+5) Setup candle alert triggers on candle close when SMA7/25/99 are present and wick/body + SMA7-behind rules match.
+6) Replay performance groups outcomes by setup type, timeframe, direction, HWC/MWC context, and quality grade.
 
 Ops
-6) The bot resumes operation after a WebSocket disconnect (auto-reconnect).
-7) Alert history survives restart (storage persistence).
-8) UI edits to pinned/disabled levels are reflected in subsequent alerts (after recompute/restart as designed).
-9) Telegram messages send successfully and include required fields.
+7) The bot resumes operation after a WebSocket disconnect (auto-reconnect).
+8) Alert history survives restart (storage persistence).
+9) UI edits to pinned/disabled levels are reflected in subsequent alerts (after recompute/restart as designed).
+10) Telegram messages send successfully and include required fields.
 11. Edge Cases & Handling
 •	Mixed/unclear HWC structure: suppress all alerts.
 •	Insufficient candles for pivots/indicators: suppress alerts for that symbol/TF until warm.
@@ -145,9 +159,11 @@ Unit tests
 •	Volume highest(10) logic.
 •	DI peak zone construction + proximity check.
 •	Setup candle wick/body + SMA7-behind logic.
+•	Replay performance grouping + A/B/C quality grading.
 
 Integration tests
 •	Replay historical klines for 15m/1h and verify alert timestamps.
+•	Run 30-day replay on liquid symbols and compare setup performance before promoting MWC or grade rules into hard filters.
 •	Simulate WS disconnect (force close) and confirm reconnect.
 •	UI edits: add/disable levels and verify effective levels update.
 

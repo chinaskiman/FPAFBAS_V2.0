@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from app.candle_cache import Candle, CandleCache
 from app.config import WatchlistConfig
 from app.main import app
-from app.replay import replay_run, replay_summary
+from app.replay import replay_performance_report, replay_run, replay_summary
 
 
 class FakeIngest:
@@ -252,3 +252,53 @@ def test_replay_summary_counts_retest_signals() -> None:
         for item in result["items"]
         for signal in item.get("signals", [])
     )
+
+
+def test_replay_performance_report_groups_outcomes_and_quality() -> None:
+    result = {
+        "symbol": "BTCUSDT",
+        "tf": "1h",
+        "step": 1,
+        "items": [
+            {
+                "time": 1000,
+                "candle": {"high": 101.0, "low": 99.0},
+                "signals": [
+                    {
+                        "type": "retest",
+                        "direction": "long",
+                        "time": 1000,
+                        "entry": 100.0,
+                        "sl": 95.0,
+                        "context": {
+                            "weekly_bias": "bullish",
+                            "daily_bias": "bullish",
+                            "four_hour_bias": "bullish",
+                            "hwc_bias": "bullish",
+                            "mwc_bias": "bullish",
+                            "volume_spike_ok": True,
+                            "pullback_vol_decline": True,
+                            "not_at_peak_long": True,
+                            "rsi_distance": 20.0,
+                        },
+                    }
+                ],
+            },
+            {"time": 2000, "candle": {"high": 111.0, "low": 99.0}, "signals": []},
+            {"time": 3000, "candle": {"high": 113.0, "low": 100.0}, "signals": []},
+        ],
+    }
+
+    report = replay_performance_report(result)
+
+    assert report["trades"] == 1
+    assert report["wins"] == 1
+    assert report["losses"] == 0
+    assert report["win_rate"] == 1.0
+    assert report["realized_r_total"] == 2.0
+    assert report["trade_rows"][0]["quality_grade"] == "A"
+    assert report["trade_rows"][0]["bias_alignment_count"] == 5
+    by_type = {item["key"]: item for item in report["groups"]["by_type"]}
+    assert by_type["retest"]["wins"] == 1
+    by_quality = {item["key"]: item for item in report["groups"]["by_quality"]}
+    assert by_quality["A"]["trades"] == 1

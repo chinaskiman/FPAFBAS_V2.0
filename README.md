@@ -98,8 +98,11 @@ CORS_ORIGINS=http://localhost,http://127.0.0.1
 
 - On startup, backend bootstraps klines from Binance REST and opens WS streams for closed 15m/1h/4h/1d candles.
 - Candle caches feed indicators, pivots, levels, and signal detection.
+- HWC is the hard Weekly+Daily direction filter; MWC is Daily+4H context for alerts and replay analysis.
+- DI peak uses Option 1 from the PRD: DI pivot highs are clustered into peak zones and current DI is checked within 3% proximity.
+- Setup candle detection requires SMA7/25/99, directional wick >= 1.5x body, and SMA7 behind the candle body.
 - Alerts are persisted to SQLite and de-duplicated before notifying Telegram.
-- Replay mode runs the same pipeline candle-by-candle without lookahead.
+- Replay mode runs the same pipeline candle-by-candle without lookahead and reports performance by setup, direction, HWC/MWC context, and quality grade.
 
 ## Key Endpoints
 
@@ -138,12 +141,13 @@ Forward test:
 Replay:
 - `GET /api/replay/{symbol}/{tf}?from_ms=...&to_ms=...&step=...&warmup=...`
 - `GET /api/replay_summary/{symbol}/{tf}?from_ms=...&to_ms=...&step=...&warmup=...`
+- `GET /api/replay_performance/{symbol}/{tf}?from_ms=...&to_ms=...&warmup=...`
 
 ## Frontend Highlights
 
 - Watchlist management (add/remove symbols, edit entry TFs).
 - Chart Workspace with candlesticks, SMA7, S/R zones, and signal markers.
-- Replay UI with scrubber + signal details.
+- Replay UI with scrubber, signal details, backend performance cards, and setup-type performance table.
 - Alert review with filtering/pagination and Telegram message preview.
 - Journal page with filters, detail drawer, and JSONL export (admin token required).
 - Forward Test page with live paper-trading metrics, equity/drawdown charts, regime/time analytics, and trade table export.

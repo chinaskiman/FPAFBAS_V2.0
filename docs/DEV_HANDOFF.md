@@ -20,7 +20,7 @@ Always-on service on a VPS that monitors Binance USDT perpetual futures. Signals
                ▼                                        ▼
 ┌──────────────────────────────┐           ┌──────────────────────────────┐
 │      Levels Engine (S/R)      │           │       Strategy Engine        │
-│  - pivots 2L/2R on 1w/1d/4h   │           │  - HWC bias (1w+1d)          │
+│  - pivots 2L/2R on 1w/1d/4h   │           │  - HWC bias + MWC context    │
 │  - clustering tol%            │           │  - continuation/retest/...   │
 │  - overrides: add/disable     │           │  - DI peak zones (Option 1)  │
 └──────────────┬───────────────┘           └──────────────┬───────────────┘
@@ -52,7 +52,8 @@ Always-on service on a VPS that monitors Binance USDT perpetual futures. Signals
 •	Indicators: Compute RSI(14), ATR(5), SMA(7/25/99), DI+/DI-, ADX(14), volume stats. Calculations run after candle close.
 •	Levels Engine: Auto S/R from 1W/1D/4H pivot highs/lows (2L/2R) + clustering. Apply overrides (add/pin, disable).
 •	DI Peak Engine (Option 1): Build DI peak zones from DI pivot highs (2L/2R) + clustering; flag DI 'at peak' if within 3% of a zone.
-•	Strategy Engine: Implements HWC bias filter + setup detection (Continuation/Retest/Fake-out/Setup candle). Outputs alert candidates.
+•	Strategy Engine: Implements HWC bias filter, MWC context (1D+4H), and setup detection (Continuation/Retest/Fake-out/Setup candle). Outputs alert candidates.
+•	Replay Performance Engine: Groups replay outcomes by setup, symbol, timeframe, direction, HWC, MWC, and A/B/C quality grade.
 •	Alert Orchestrator: Spam control (cooldown + daily cap). Formats Telegram message + structured JSON payload.
 •	Notifier: Send Telegram alerts.
 •	Storage: Log alerts to SQLite (recommended) for audit and UI history.
@@ -62,6 +63,10 @@ Trend filter (HWC):
 •	Compute Dow structure on 1W and 1D using pivot swings (2L/2R).
 •	Bullish if latest swings show HH + HL. Bearish if LL + LH. Mixed/unclear => suppress all alerts.
 •	Trade direction = HWC direction only.
+MWC context:
+•	Compute Dow structure on 1D and 4H using the same pivot swing logic.
+•	MWC is reported in signal context, Telegram messages, replay grouping, and dashboard tables.
+•	MWC does not suppress alerts by default; use replay results before promoting it to a hard filter.
 Levels (S/R):
 •	Detect pivot highs/lows on 1W/1D/4H using 2L/2R.
 •	Cluster candidate prices within cluster_tol_pct (default 0.30%).
@@ -69,9 +74,9 @@ Levels (S/R):
 •	Apply overrides: add/pin levels always included; disable removes matching auto levels within tolerance.
 Setups (evaluated on entry TF candle close):
 •	Continuation (strong momentum only): candle closes beyond a level in HWC direction AND volume is highest of last 10 candles AND DI not at peak.
-•	Retest: wick tags the level; pullback volume is declining; alert triggers on close back in trend direction.
+•	Retest: wick tags the level; pullback volume is declining; alert triggers on close back in trend direction. SL beyond retest candle extreme + 0.15%.
 •	Fake-out (within 10 candles): break against HWC direction; retest volume increasing (vol > prev AND vol > MA10); candle closes back inside => alert. Include SL note: beyond fake extreme + 0.15%.
-•	Setup Candle (SMA7): SMA(7/25/99) present; wick >= 1.5× body (directional); SMA7 behind candle body; alert on close; SL other side of candle.
+•	Setup Candle: SMA(7/25/99) present; wick >= 1.5× body (directional); SMA7 behind candle body; alert on close; SL other side of candle. LONG requires bullish body + lower rejection wick + SMA7 at/below body low. SHORT requires bearish body + upper rejection wick + SMA7 at/above body high.
 5) Data Contracts
 watchlist.json example (dev contract):
 {
@@ -130,10 +135,15 @@ Minimal API endpoints (JSON):
 •	POST /api/levels/{symbol}/add : add pinned level
 •	POST /api/levels/{symbol}/disable : disable level
 •	POST /api/levels/{symbol}/enable : re-enable disabled level
+Replay/performance API endpoints:
+•	GET /api/replay/{symbol}/{tf}?from_ms=...&to_ms=...&step=...&warmup=... : candle-by-candle replay output
+•	GET /api/replay_summary/{symbol}/{tf}?from_ms=...&to_ms=...&step=...&warmup=... : replay counts + backend performance summary
+•	GET /api/replay_performance/{symbol}/{tf}?from_ms=...&to_ms=...&warmup=... : performance report only, computed with step=1
 7) Alert Payload & Telegram Message Format
 Telegram message fields:
 •	symbol | tf | setup | direction
 •	price close
+•	bias context: Weekly, Daily, 4H, HWC, MWC
 •	level (if applicable)
 •	why (volume spike / DI pass / wick tag / fake-out conditions)
 •	TradingView link (optional)
@@ -155,6 +165,8 @@ Structured payload (stored in DB) should include:
 •	Logging: structured logs (timestamp, symbol, tf, setup, errors).
 10) Testing Checklist (Quick)
 •	Replay historical klines to validate each setup triggers at correct candle close.
+•	Use 30-day replay reports on liquid symbols before changing setup filters.
+•	Compare setup type, timeframe, direction, HWC/MWC context, quality grade, win rate, realized R, max RR, and drawdown R.
 •	Validate pivot detection and clustering with unit tests.
 •	Disconnect WS to ensure auto reconnect.
 •	Edit levels in UI and confirm they affect alerts.

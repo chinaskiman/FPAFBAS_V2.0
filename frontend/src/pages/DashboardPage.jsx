@@ -1890,28 +1890,88 @@ export default function DashboardPage({ view = "dashboard" }) {
         </div>
 
         {replaySummary ? (
-          <div className="di-grid">
-            <div>
-              <span>Total Steps</span>
-              <strong>{replaySummary.total_steps}</strong>
+          <div>
+            <div className="di-grid">
+              <div>
+                <span>Total Steps</span>
+                <strong>{replaySummary.total_steps}</strong>
+              </div>
+              <div>
+                <span>Signals</span>
+                <strong>{replaySummary.signals_total}</strong>
+              </div>
+              <div>
+                <span>Break / Retest / Setup / Fakeout</span>
+                <strong>
+                  {replaySummary.by_type?.break ?? 0} / {replaySummary.by_type?.retest ?? 0} /{" "}
+                  {replaySummary.by_type?.setup ?? 0} / {replaySummary.by_type?.fakeout ?? 0}
+                </strong>
+              </div>
+              <div>
+                <span>Long / Short</span>
+                <strong>
+                  {replaySummary.by_direction?.long ?? 0} / {replaySummary.by_direction?.short ?? 0}
+                </strong>
+              </div>
             </div>
-            <div>
-              <span>Signals</span>
-              <strong>{replaySummary.signals_total}</strong>
-            </div>
-            <div>
-              <span>Break / Retest / Setup / Fakeout</span>
-              <strong>
-                {replaySummary.by_type?.break ?? 0} / {replaySummary.by_type?.retest ?? 0} /{" "}
-                {replaySummary.by_type?.setup ?? 0} / {replaySummary.by_type?.fakeout ?? 0}
-              </strong>
-            </div>
-            <div>
-              <span>Long / Short</span>
-              <strong>
-                {replaySummary.by_direction?.long ?? 0} / {replaySummary.by_direction?.short ?? 0}
-              </strong>
-            </div>
+            {replaySummary.performance ? (
+              <>
+                <div className="di-grid">
+                  <div>
+                    <span>Performance Trades</span>
+                    <strong>{replaySummary.performance.trades ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>Win Rate</span>
+                    <strong>{formatPercentFraction(replaySummary.performance.win_rate)}</strong>
+                  </div>
+                  <div>
+                    <span>Total Realized R</span>
+                    <strong>{formatNumber(replaySummary.performance.realized_r_total)}</strong>
+                  </div>
+                  <div>
+                    <span>Avg Max RR</span>
+                    <strong>{formatNumber(replaySummary.performance.max_rr_avg)}</strong>
+                  </div>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Setup</th>
+                        <th>Trades</th>
+                        <th>W/L/O</th>
+                        <th>Win Rate</th>
+                        <th>Total R</th>
+                        <th>Avg Max RR</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(replaySummary.performance.groups?.by_type ?? []).length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="muted">
+                            No replay performance rows yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        replaySummary.performance.groups.by_type.map((row) => (
+                          <tr key={`perf-type-${row.key}`}>
+                            <td>{row.key}</td>
+                            <td>{row.trades}</td>
+                            <td>
+                              {row.wins} / {row.losses} / {row.open}
+                            </td>
+                            <td>{formatPercentFraction(row.win_rate)}</td>
+                            <td>{formatNumber(row.realized_r_total)}</td>
+                            <td>{formatNumber(row.max_rr_avg)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : null}
           </div>
         ) : null}
 
