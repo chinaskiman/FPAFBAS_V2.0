@@ -26,12 +26,13 @@ from .config import (
 from .ingest_service import IngestService
 from .di_peak import (
     DI_PEAK_MIN_DI,
+    DI_PEAK_PROX_PCT,
     DI_PEAK_RATIO_THRESHOLD,
     DI_PEAK_SUSTAIN_BARS,
     DI_PEAK_WINDOW_DEFAULT,
     compute_di_peak_flags,
 )
-from .hwc import compute_hwc_bias
+from .hwc import compute_hwc_bias, compute_mwc_bias
 from .volume_filters import compute_pullback_vol_decline, compute_vol_metrics
 from .rsi_filters import atr_multiplier_from_rsi, rsi_distance_from_50
 from .level_events import detect_level_events
@@ -715,7 +716,14 @@ def api_chart_bundle(symbol: str, tf: str, limit: int = 500) -> dict:
     )
 
     events = detect_level_events(candles, merged["final_levels"])
-    setup_items = detect_setup_candles(candles, indicators.get("sma7", []), events, sl_buffer_pct=0.0015)
+    setup_items = detect_setup_candles(
+        candles,
+        indicators.get("sma7", []),
+        indicators.get("sma25", []),
+        indicators.get("sma99", []),
+        events,
+        sl_buffer_pct=0.0015,
+    )
     try:
         openings = build_openings(ingest, config, symbol, tf, limit=limit)
     except Exception:
@@ -972,10 +980,13 @@ def api_hwc(symbol: str) -> dict:
         raise HTTPException(status_code=503, detail="Ingestion not initialized")
     weekly_cache = ingest.get_cache(symbol, "1w")
     daily_cache = ingest.get_cache(symbol, "1d")
+    four_hour_cache = ingest.get_cache(symbol, "4h")
     if weekly_cache is None or daily_cache is None:
         raise HTTPException(status_code=404, detail="Missing weekly or daily cache")
     hwc = compute_hwc_bias(weekly_cache.list_all(), daily_cache.list_all())
-    return {"symbol": symbol.upper(), **hwc}
+    four_hour = four_hour_cache.list_all() if four_hour_cache else []
+    mwc = compute_mwc_bias(daily_cache.list_all(), four_hour)
+    return {"symbol": symbol.upper(), **hwc, **mwc}
 
 
 @app.get("/api/di_peak/{symbol}/{tf}")
@@ -984,6 +995,7 @@ def api_di_peak(
     tf: str,
     window: int = DI_PEAK_WINDOW_DEFAULT,
     ratio_threshold: float = DI_PEAK_RATIO_THRESHOLD,
+    proximity_pct: float = DI_PEAK_PROX_PCT,
     min_di: float = DI_PEAK_MIN_DI,
     sustain: int = DI_PEAK_SUSTAIN_BARS,
 ) -> dict:
@@ -997,6 +1009,7 @@ def api_di_peak(
         data.get("di_plus", []),
         window=window,
         ratio_threshold=ratio_threshold,
+        proximity_pct=proximity_pct,
         min_di=min_di,
         sustain_bars=sustain,
     )
@@ -1004,6 +1017,7 @@ def api_di_peak(
         data.get("di_minus", []),
         window=window,
         ratio_threshold=ratio_threshold,
+        proximity_pct=proximity_pct,
         min_di=min_di,
         sustain_bars=sustain,
     )
@@ -1016,6 +1030,7 @@ def api_di_peak(
         "tf": tf,
         "window": window,
         "ratio_threshold": ratio_threshold,
+        "proximity_pct": proximity_pct,
         "min_di": min_di,
         "sustain_bars": sustain,
         "di_plus": di_plus,
@@ -1211,7 +1226,9 @@ def api_setup_candles(symbol: str, tf: str, limit: int = 300) -> dict:
     final_levels = merged["final_levels"]
 
     events = detect_level_events(candles, final_levels)
-    items = detect_setup_candles(candles, sma7, events, sl_buffer_pct=0.0015)
+    sma25 = sma(closes, 25)
+    sma99 = sma(closes, 99)
+    items = detect_setup_candles(candles, sma7, sma25, sma99, events, sl_buffer_pct=0.0015)
     timestamp = candles[-1].close_time if candles else None
     return {
         "symbol": symbol.upper(),

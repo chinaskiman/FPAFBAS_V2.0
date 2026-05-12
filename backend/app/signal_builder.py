@@ -68,6 +68,60 @@ def build_signals_from_state(
         )
         break_levels.add(event.get("level"))
 
+    for event in events:
+        if not setups.get("retest", True):
+            continue
+        if event.get("retest_time") != last_candle_time:
+            continue
+        if event.get("last_fakeout"):
+            continue
+        if event.get("direction") == "up":
+            direction = "long"
+        elif event.get("direction") == "down":
+            direction = "short"
+        else:
+            continue
+        if rules.get("hwc_filter", True) and not _direction_allowed_by_hwc(direction, context):
+            continue
+        if rules.get("pullback_volume_filter", True) and not context.get("pullback_vol_decline"):
+            continue
+        retest_index = event.get("retest_index")
+        if retest_index is None or retest_index < 0 or retest_index >= len(candles):
+            continue
+        candle = candles[retest_index]
+        level = event.get("level")
+        if level is None:
+            continue
+        if direction == "long":
+            if not (candle.low <= level and candle.close > level):
+                continue
+            sl = candle.low * (1 - 0.0015)
+        else:
+            if not (candle.high >= level and candle.close < level):
+                continue
+            sl = candle.high * (1 + 0.0015)
+        signals.append(
+            _signal_payload(
+                {
+                    "type": "retest",
+                    "level": level,
+                    "direction": direction,
+                    "time": event.get("retest_time"),
+                    "entry": candle.close,
+                    "sl": sl,
+                    "sl_reason": "retest_extreme",
+                },
+                candle,
+                {
+                    "break_index": event.get("last_break", {}).get("index") if event.get("last_break") else None,
+                    "retest_index": retest_index,
+                    "fakeout_index": event.get("last_fakeout", {}).get("index") if event.get("last_fakeout") else None,
+                },
+                None,
+                context,
+            )
+        )
+
     for item in setup_items:
         if not setups.get("setup_candle", True):
             continue

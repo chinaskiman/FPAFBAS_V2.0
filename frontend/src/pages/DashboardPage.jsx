@@ -108,7 +108,7 @@ export default function DashboardPage({ view = "dashboard" }) {
   const [diPeak, setDiPeak] = useState(null);
   const [diPeakError, setDiPeakError] = useState("");
   const [diTf, setDiTf] = useState("15m");
-  const [diWindow] = useState(30);
+  const [diWindow] = useState(120);
   const [volData, setVolData] = useState(null);
   const [volError, setVolError] = useState("");
   const [volTf, setVolTf] = useState("15m");
@@ -1228,12 +1228,12 @@ export default function DashboardPage({ view = "dashboard" }) {
     if (replayOutcomeFilter !== "all") {
       rows = rows.filter((item) => item.outcome === replayOutcomeFilter);
     }
-    if (replayBiasAlignmentFilter === "aligned_3") {
-      rows = rows.filter((item) => item.bias_alignment_count === 3);
-    } else if (replayBiasAlignmentFilter === "aligned_2") {
-      rows = rows.filter((item) => item.bias_alignment_count === 2);
-    } else if (replayBiasAlignmentFilter === "aligned_0_1") {
-      rows = rows.filter((item) => item.bias_alignment_count <= 1);
+    if (replayBiasAlignmentFilter === "aligned_5") {
+      rows = rows.filter((item) => item.bias_alignment_count === 5);
+    } else if (replayBiasAlignmentFilter === "aligned_4") {
+      rows = rows.filter((item) => item.bias_alignment_count === 4);
+    } else if (replayBiasAlignmentFilter === "aligned_0_3") {
+      rows = rows.filter((item) => item.bias_alignment_count <= 3);
     }
 
     rows.sort((a, b) => {
@@ -1694,7 +1694,8 @@ export default function DashboardPage({ view = "dashboard" }) {
                 <span>HWC Bias</span>
                 <strong className={`bias-${bias?.hwc_bias ?? "neutral"}`}>{bias?.hwc_bias ?? "-"}</strong>
                 <small>
-                  Weekly: {bias?.weekly?.bias ?? "-"} / Daily: {bias?.daily?.bias ?? "-"}
+                  Weekly: {bias?.weekly?.bias ?? "-"} / Daily: {bias?.daily?.bias ?? "-"} / 4H:{" "}
+                  {bias?.four_hour?.bias ?? "-"} / MWC: {bias?.mwc_bias ?? "-"}
                 </small>
               </div>
             ) : null}
@@ -1899,9 +1900,10 @@ export default function DashboardPage({ view = "dashboard" }) {
               <strong>{replaySummary.signals_total}</strong>
             </div>
             <div>
-              <span>Break / Setup / Fakeout</span>
+              <span>Break / Retest / Setup / Fakeout</span>
               <strong>
-                {replaySummary.by_type?.break ?? 0} / {replaySummary.by_type?.setup ?? 0} / {replaySummary.by_type?.fakeout ?? 0}
+                {replaySummary.by_type?.break ?? 0} / {replaySummary.by_type?.retest ?? 0} /{" "}
+                {replaySummary.by_type?.setup ?? 0} / {replaySummary.by_type?.fakeout ?? 0}
               </strong>
             </div>
             <div>
@@ -1993,9 +1995,9 @@ export default function DashboardPage({ view = "dashboard" }) {
                   onChange={(event) => setReplayBiasAlignmentFilter(event.target.value)}
                 >
                   <option value="all">All</option>
-                  <option value="aligned_3">3/3 aligned</option>
-                  <option value="aligned_2">2/3 aligned</option>
-                  <option value="aligned_0_1">0-1/3 aligned</option>
+                  <option value="aligned_5">5/5 aligned</option>
+                  <option value="aligned_4">4/5 aligned</option>
+                  <option value="aligned_0_3">0-3/5 aligned</option>
                 </select>
               </label>
               <label className="field">
@@ -2093,7 +2095,8 @@ export default function DashboardPage({ view = "dashboard" }) {
                         <td>{formatNumber(trade.entry)}</td>
                         <td>{formatNumber(trade.sl)}</td>
                         <td>
-                          {trade.weekly_bias} / {trade.daily_bias} / {trade.hwc_bias}
+                          {trade.weekly_bias} / {trade.daily_bias} / {trade.four_hour_bias} / {trade.hwc_bias} /{" "}
+                          {trade.mwc_bias}
                         </td>
                         <td>{trade.bias_alignment_label}</td>
                         <td>{trade.outcome}</td>
@@ -2218,6 +2221,7 @@ export default function DashboardPage({ view = "dashboard" }) {
                 >
                   <option value="">All</option>
                   <option value="break">break</option>
+                  <option value="retest">retest</option>
                   <option value="setup">setup</option>
                   <option value="fakeout">fakeout</option>
                 </select>
@@ -2598,6 +2602,18 @@ export default function DashboardPage({ view = "dashboard" }) {
                 />
               </label>
               <label className="field">
+                <span>Retest</span>
+                <input
+                  type="number"
+                  value={qualitySettings.min_score_by_type?.retest ?? ""}
+                  onChange={(event) =>
+                    setQualitySettings((prev) =>
+                      updateQuality(prev, ["min_score_by_type", "retest"], event.target.value)
+                    )
+                  }
+                />
+              </label>
+              <label className="field">
                 <span>Setup</span>
                 <input
                   type="number"
@@ -2632,6 +2648,18 @@ export default function DashboardPage({ view = "dashboard" }) {
                   onChange={(event) =>
                     setQualitySettings((prev) =>
                       updateQuality(prev, ["cooldown_minutes_by_type", "break"], event.target.value)
+                    )
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Retest</span>
+                <input
+                  type="number"
+                  value={qualitySettings.cooldown_minutes_by_type?.retest ?? ""}
+                  onChange={(event) =>
+                    setQualitySettings((prev) =>
+                      updateQuality(prev, ["cooldown_minutes_by_type", "retest"], event.target.value)
                     )
                   }
                 />
@@ -2927,12 +2955,20 @@ export default function DashboardPage({ view = "dashboard" }) {
               <strong className={`bias-${bias.hwc_bias}`}>{bias.hwc_bias}</strong>
             </div>
             <div>
+              <span>MWC Context</span>
+              <strong className={`bias-${bias.mwc_bias}`}>{bias.mwc_bias}</strong>
+            </div>
+            <div>
               <span>Weekly</span>
               <strong className={`bias-${bias.weekly.bias}`}>{bias.weekly.bias}</strong>
             </div>
             <div>
               <span>Daily</span>
               <strong className={`bias-${bias.daily.bias}`}>{bias.daily.bias}</strong>
+            </div>
+            <div>
+              <span>4H</span>
+              <strong className={`bias-${bias.four_hour?.bias ?? "neutral"}`}>{bias.four_hour?.bias ?? "-"}</strong>
             </div>
           </div>
         ) : (
@@ -2972,14 +3008,18 @@ export default function DashboardPage({ view = "dashboard" }) {
             <div>
               <span>DI+</span>
               <strong>{formatNumber(diPeak.di_plus?.last)}</strong>
-              <small>Peak {formatNumber(diPeak.di_plus?.peak)} | Ratio {formatNumber(diPeak.di_plus?.ratio)}</small>
+              <small>
+                Zone {formatNumber(diPeak.di_plus?.peak)} | Distance {formatNumber(diPeak.di_plus?.distance_pct)}
+              </small>
               <span className="badge">{diPeak.di_plus?.in_peak_zone ? "Zone" : "Out"}</span>
               <span className="badge">{diPeak.di_plus?.is_peak ? "Peak" : "No Peak"}</span>
             </div>
             <div>
               <span>DI-</span>
               <strong>{formatNumber(diPeak.di_minus?.last)}</strong>
-              <small>Peak {formatNumber(diPeak.di_minus?.peak)} | Ratio {formatNumber(diPeak.di_minus?.ratio)}</small>
+              <small>
+                Zone {formatNumber(diPeak.di_minus?.peak)} | Distance {formatNumber(diPeak.di_minus?.distance_pct)}
+              </small>
               <span className="badge">{diPeak.di_minus?.in_peak_zone ? "Zone" : "Out"}</span>
               <span className="badge">{diPeak.di_minus?.is_peak ? "Peak" : "No Peak"}</span>
             </div>
@@ -3263,6 +3303,10 @@ export default function DashboardPage({ view = "dashboard" }) {
                 <strong className={`bias-${openings.hwc_bias}`}>{openings.hwc_bias}</strong>
               </div>
               <div>
+                <span>MWC Context</span>
+                <strong className={`bias-${openings.mwc_bias}`}>{openings.mwc_bias}</strong>
+              </div>
+              <div>
                 <span>Last Candle</span>
                 <strong>{openings.last_candle_time ? new Date(openings.last_candle_time).toLocaleString() : "-"}</strong>
               </div>
@@ -3434,8 +3478,10 @@ function getBiasAlignment(direction, context) {
   const expected = expectedBiasForDirection(direction);
   const weekly = String(context?.weekly_bias || "neutral").toLowerCase();
   const daily = String(context?.daily_bias || "neutral").toLowerCase();
+  const fourHour = String(context?.four_hour_bias || "neutral").toLowerCase();
   const hwc = String(context?.hwc_bias || "neutral").toLowerCase();
-  const values = [weekly, daily, hwc];
+  const mwc = String(context?.mwc_bias || "neutral").toLowerCase();
+  const values = [weekly, daily, fourHour, hwc, mwc];
   let aligned = 0;
   if (expected) {
     values.forEach((value) => {
@@ -3446,10 +3492,12 @@ function getBiasAlignment(direction, context) {
   }
   return {
     aligned_count: aligned,
-    label: `${aligned}/3 aligned`,
+    label: `${aligned}/5 aligned`,
     weekly_bias: weekly,
     daily_bias: daily,
+    four_hour_bias: fourHour,
     hwc_bias: hwc,
+    mwc_bias: mwc,
   };
 }
 
@@ -3681,7 +3729,9 @@ function buildReplayTradeOutcomes(items, symbol, tf) {
         risk,
         weekly_bias: alignment.weekly_bias,
         daily_bias: alignment.daily_bias,
+        four_hour_bias: alignment.four_hour_bias,
         hwc_bias: alignment.hwc_bias,
+        mwc_bias: alignment.mwc_bias,
         bias_alignment_count: alignment.aligned_count,
         bias_alignment_label: alignment.label,
         ...outcome,
@@ -3782,7 +3832,9 @@ function formatTelegramText(alert) {
   const time = alert.time ?? payload.time;
   const weeklyBias = String(context.weekly_bias ?? alert.weekly_bias ?? payload.weekly_bias ?? "-");
   const dailyBias = String(context.daily_bias ?? alert.daily_bias ?? payload.daily_bias ?? "-");
+  const fourHourBias = String(context.four_hour_bias ?? alert.four_hour_bias ?? payload.four_hour_bias ?? "-");
   const hwcBias = String(context.hwc_bias ?? alert.hwc_bias ?? payload.hwc_bias ?? "-");
+  const mwcBias = String(context.mwc_bias ?? alert.mwc_bias ?? payload.mwc_bias ?? "-");
 
   const volOk = context.vol_ma5_slope_ok;
   const pullbackVol = context.pullback_vol_decline;
@@ -3814,7 +3866,7 @@ function formatTelegramText(alert) {
   } else {
     parts.push("Risk (1R): - | TP@2R: -");
   }
-  parts.push(`Bias: W ${weeklyBias} | D ${dailyBias} | HWC ${hwcBias}`);
+  parts.push(`Bias: W ${weeklyBias} | D ${dailyBias} | 4H ${fourHourBias} | HWC ${hwcBias} | MWC ${mwcBias}`);
   parts.push(
     `Checks: VOL_OK=${formatTelegramBool(volOk)} | DI_OK=${formatTelegramBool(diOk)} | PULLBACK_VOL=${formatTelegramBool(pullbackVol)}`
   );
@@ -4385,6 +4437,11 @@ function buildReplayMarkers(signals) {
           shape = "circle";
           text = "F";
           break;
+        case "retest":
+          color = isBull ? "#2367a3" : "#8a3f8a";
+          shape = "circle";
+          text = "R";
+          break;
         case "setup":
           color = isBull ? "#2d8f6f" : "#7a2f2f";
           shape = isBull ? "arrowUp" : "arrowDown";
@@ -4556,9 +4613,11 @@ function updateQuality(prev, path, value) {
   const lastKey = path[path.length - 1];
   const numericFields = new Set([
     "min_score_by_type.break",
+    "min_score_by_type.retest",
     "min_score_by_type.setup",
     "min_score_by_type.fakeout",
     "cooldown_minutes_by_type.break",
+    "cooldown_minutes_by_type.retest",
     "cooldown_minutes_by_type.setup",
     "cooldown_minutes_by_type.fakeout",
     "max_alerts_per_symbol_per_hour",

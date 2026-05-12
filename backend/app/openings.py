@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .di_peak import DI_PEAK_WINDOW_DEFAULT, compute_di_peak_flags
-from .hwc import compute_hwc_bias
+from .hwc import compute_hwc_bias, compute_mwc_bias
 from .indicators import sma
 from .level_events import detect_level_events
 from .levels import HTF_TFS, apply_overrides, compute_levels
@@ -21,20 +21,27 @@ def build_openings(ingest, config, symbol: str, tf: str, limit: int = 300) -> di
 
     weekly_cache = ingest.get_cache(symbol_upper, "1w")
     daily_cache = ingest.get_cache(symbol_upper, "1d")
+    four_hour_cache = ingest.get_cache(symbol_upper, "4h")
     weekly = weekly_cache.list_all() if weekly_cache else []
     daily = daily_cache.list_all() if daily_cache else []
+    four_hour = four_hour_cache.list_all() if four_hour_cache else []
     hwc = compute_hwc_bias(weekly, daily)
+    mwc = compute_mwc_bias(daily, four_hour)
     hwc_bias = hwc["hwc_bias"]
     weekly_bias = hwc.get("weekly", {}).get("bias")
     daily_bias = hwc.get("daily", {}).get("bias")
+    four_hour_bias = mwc.get("four_hour", {}).get("bias")
+    mwc_bias = mwc["mwc_bias"]
 
     if not candles:
         return {
             "symbol": symbol_upper,
             "tf": tf,
             "hwc_bias": hwc_bias,
+            "mwc_bias": mwc_bias,
             "weekly_bias": weekly_bias,
             "daily_bias": daily_bias,
+            "four_hour_bias": four_hour_bias,
             "last_candle_time": None,
             "signals": [],
         }
@@ -44,9 +51,16 @@ def build_openings(ingest, config, symbol: str, tf: str, limit: int = 300) -> di
     atr_series = indicator_data.get("atr5", [])
     di_plus = indicator_data.get("di_plus", [])
     di_minus = indicator_data.get("di_minus", [])
+    closes = [candle.close for candle in candles]
     sma7 = indicator_data.get("sma7")
     if sma7 is None:
-        sma7 = sma([candle.close for candle in candles], 7)
+        sma7 = sma(closes, 7)
+    sma25 = indicator_data.get("sma25")
+    if sma25 is None:
+        sma25 = sma(closes, 25)
+    sma99 = indicator_data.get("sma99")
+    if sma99 is None:
+        sma99 = sma(closes, 99)
 
     symbol_config = next(
         (item for item in config.symbols if item.symbol.upper() == symbol_upper),
@@ -88,8 +102,11 @@ def build_openings(ingest, config, symbol: str, tf: str, limit: int = 300) -> di
         "atr_mult": atr_mult,
         "atr_stop_distance": atr_stop_distance,
         "hwc_bias": hwc_bias,
+        "mwc_bias": mwc_bias,
         "weekly_bias": weekly_bias,
         "daily_bias": daily_bias,
+        "four_hour_bias": four_hour_bias,
+        "mwc": mwc,
         "rules": rules,
         "setups": setups,
     }
@@ -112,7 +129,7 @@ def build_openings(ingest, config, symbol: str, tf: str, limit: int = 300) -> di
     if not symbol_config.rules.fakeout_volume_filter:
         fakeout_volume_series = [True] * len(candles)
     events = detect_level_events(candles, final_levels, slope_ok_series=fakeout_volume_series)
-    setup_items = detect_setup_candles(candles, sma7, events, sl_buffer_pct=0.0015)
+    setup_items = detect_setup_candles(candles, sma7, sma25, sma99, events, sl_buffer_pct=0.0015)
 
     signals = build_signals_from_state(
         candles,
@@ -126,8 +143,11 @@ def build_openings(ingest, config, symbol: str, tf: str, limit: int = 300) -> di
         "symbol": symbol_upper,
         "tf": tf,
         "hwc_bias": hwc_bias,
+        "mwc_bias": mwc_bias,
         "weekly_bias": weekly_bias,
         "daily_bias": daily_bias,
+        "four_hour_bias": four_hour_bias,
+        "mwc": mwc,
         "last_candle_time": last_candle_time,
         "signals": signals,
     }

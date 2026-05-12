@@ -27,7 +27,7 @@ DEFAULT_TIMEZONE = os.getenv("FT_TIMEZONE", "Europe/Berlin")
 DEFAULT_REST_BASE = os.getenv("BINANCE_FAPI_REST", "https://fapi.binance.com")
 DEFAULT_MAINT_MARGIN_RATE = float(os.getenv("FT_MAINT_MARGIN_RATE", "0.004"))
 
-ALLOWED_SIGNAL_TYPES = {"break", "setup", "fakeout"}
+ALLOWED_SIGNAL_TYPES = {"break", "retest", "setup", "fakeout"}
 TRENDING_BIASES = {"bullish", "bearish"}
 DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 

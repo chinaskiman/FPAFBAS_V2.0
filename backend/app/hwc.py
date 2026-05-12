@@ -65,13 +65,28 @@ def compute_timeframe_bias(candles: List[Candle]) -> dict:
 def compute_hwc_bias(weekly: List[Candle], daily: List[Candle]) -> dict:
     weekly_bias = compute_timeframe_bias(weekly)
     daily_bias = compute_timeframe_bias(daily)
-    hwc = "neutral"
-    if weekly_bias["bias"] == "bullish" and daily_bias["bias"] == "bullish":
-        hwc = "bullish"
-    elif weekly_bias["bias"] == "bearish" and daily_bias["bias"] == "bearish":
-        hwc = "bearish"
+    hwc = _combine_biases(weekly_bias["bias"], daily_bias["bias"])
     return {
         "weekly": weekly_bias,
         "daily": daily_bias,
         "hwc_bias": hwc,
     }
+
+
+def compute_mwc_bias(daily: List[Candle], four_hour: List[Candle]) -> dict:
+    daily_bias = compute_timeframe_bias(daily)
+    four_hour_bias = compute_timeframe_bias(four_hour)
+    mwc = _combine_biases(daily_bias["bias"], four_hour_bias["bias"])
+    return {
+        "daily": daily_bias,
+        "four_hour": four_hour_bias,
+        "mwc_bias": mwc,
+    }
+
+
+def _combine_biases(first: Bias, second: Bias) -> Bias:
+    if first == "bullish" and second == "bullish":
+        return "bullish"
+    if first == "bearish" and second == "bearish":
+        return "bearish"
+    return "neutral"

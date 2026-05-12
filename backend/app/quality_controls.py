@@ -18,16 +18,16 @@ class QualitySettings(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     cooldown_minutes_by_type: Dict[str, int] = Field(
-        default_factory=lambda: {"break": 60, "setup": 45, "fakeout": 60}
+        default_factory=lambda: {"break": 60, "retest": 45, "setup": 45, "fakeout": 60}
     )
     min_score_by_type: Dict[str, int] = Field(
-        default_factory=lambda: {"break": 60, "setup": 55, "fakeout": 55}
+        default_factory=lambda: {"break": 60, "retest": 40, "setup": 55, "fakeout": 55}
     )
     max_alerts_per_symbol_per_hour: int = 6
     max_alerts_global_per_hour: int = 30
     quiet_hours: QuietHours = Field(default_factory=QuietHours)
     di_peak_window_for_quality: int = 20
-    di_peak_ratio_threshold: float = 0.98
+    di_peak_ratio_threshold: float = 0.03
 
 
 def score_signal(signal: Dict[str, Any]) -> Tuple[int, Dict[str, bool], List[str]]:

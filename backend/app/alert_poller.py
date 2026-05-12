@@ -361,6 +361,7 @@ def _signal_to_alert(openings: dict, signal: dict) -> dict:
         "sl": signal.get("sl"),
         "sl_reason": signal.get("sl_reason"),
         "hwc_bias": openings.get("hwc_bias"),
+        "mwc_bias": openings.get("mwc_bias"),
         "context": signal.get("context"),
         "payload": signal,
     }

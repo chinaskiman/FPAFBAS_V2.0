@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.candle_cache import Candle, CandleCache
-from app.hwc import classify_bias, compute_hwc_bias, extract_swings
+from app.hwc import classify_bias, compute_hwc_bias, compute_mwc_bias, extract_swings
 from app.main import app
 
 
@@ -61,11 +61,27 @@ def test_hwc_bias_combination() -> None:
     assert hwc["hwc_bias"] == "bullish"
 
 
+def test_mwc_bias_context_combines_daily_and_four_hour() -> None:
+    daily = _candles_from_series(
+        [1, 2, 3, 6, 4, 3, 2, 7, 4, 3, 2],
+        [6, 5, 4, 2, 3, 4, 5, 3, 4, 5, 6],
+    )
+    four_hour = _candles_from_series(
+        [8, 7, 6, 9, 6, 5, 7, 4, 3, 5, 2],
+        [5, 4, 3, 4, 2, 1, 3, 2, 0.5, 2, 3],
+    )
+    mwc = compute_mwc_bias(daily, four_hour)
+    assert mwc["daily"]["bias"] == "bullish"
+    assert mwc["four_hour"]["bias"] == "bearish"
+    assert mwc["mwc_bias"] == "neutral"
+
+
 class FakeIngest:
-    def __init__(self, weekly, daily):
+    def __init__(self, weekly, daily, four_hour):
         self._caches = {
             ("BTCUSDT", "1w"): weekly,
             ("BTCUSDT", "1d"): daily,
+            ("BTCUSDT", "4h"): four_hour,
         }
 
     def get_cache(self, symbol, tf):
@@ -78,6 +94,7 @@ class FakeIngest:
 def test_hwc_endpoint() -> None:
     weekly = CandleCache(maxlen=2000)
     daily = CandleCache(maxlen=2000)
+    four_hour = CandleCache(maxlen=2000)
     weekly.extend(
         _candles_from_series(
             [1, 2, 3, 6, 4, 3, 2, 7, 4, 3, 2],
@@ -90,9 +107,17 @@ def test_hwc_endpoint() -> None:
             [6, 5, 4, 2, 3, 4, 5, 3, 4, 5, 6],
         )
     )
+    four_hour.extend(
+        _candles_from_series(
+            [1, 2, 3, 6, 4, 3, 2, 7, 4, 3, 2],
+            [6, 5, 4, 2, 3, 4, 5, 3, 4, 5, 6],
+        )
+    )
     with TestClient(app) as client:
-        app.state.ingest = FakeIngest(weekly, daily)
+        app.state.ingest = FakeIngest(weekly, daily, four_hour)
         resp = client.get("/api/hwc/BTCUSDT")
         assert resp.status_code == 200
         payload = resp.json()
         assert payload["hwc_bias"] == "bullish"
+        assert payload["mwc_bias"] == "bullish"
+        assert payload["four_hour"]["bias"] == "bullish"

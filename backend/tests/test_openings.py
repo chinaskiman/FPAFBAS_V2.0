@@ -128,8 +128,10 @@ def test_hwc_neutral_suppresses_signals(monkeypatch, tmp_path) -> None:
     config = WatchlistConfig.model_validate(watchlist)
     result = build_openings(ingest, config, "BTCUSDT", "15m", limit=10)
     assert result["hwc_bias"] == "neutral"
+    assert result["mwc_bias"] == "neutral"
     assert result["weekly_bias"] == "neutral"
     assert result["daily_bias"] == "neutral"
+    assert result["four_hour_bias"] == "neutral"
     assert result["signals"] == []
 
 
@@ -233,8 +235,10 @@ def test_break_signal_strong_momentum(monkeypatch, tmp_path) -> None:
     assert signal["candle"]["close"] == signal["entry"]
     assert signal["level_event"]["break_index"] is not None
     assert signal["context"]["hwc_bias"] == "bullish"
+    assert signal["context"]["mwc_bias"] == "bullish"
     assert signal["context"]["weekly_bias"] == "bullish"
     assert signal["context"]["daily_bias"] == "bullish"
+    assert signal["context"]["four_hour_bias"] == "bullish"
 
 
 def test_break_suppressed_when_no_momentum(monkeypatch, tmp_path) -> None:
@@ -262,6 +266,82 @@ def test_break_suppressed_when_no_momentum(monkeypatch, tmp_path) -> None:
     config = WatchlistConfig.model_validate(watchlist)
     result = build_openings(ingest, config, "BTCUSDT", "15m", limit=10)
     assert all(signal["type"] != "break" for signal in result["signals"])
+
+
+def test_retest_signal_after_break_and_valid_touch(monkeypatch, tmp_path) -> None:
+    level = 100.0
+    watchlist = _watchlist(tmp_path, level)
+    monkeypatch.setenv("WATCHLIST_PATH", str(tmp_path / "watchlist.json"))
+
+    tf_cache = CandleCache(maxlen=2000)
+    closes = [95, 96, 97, 98, 99, 101, 102, 101.5, 101]
+    lows = [close - 1 for close in closes]
+    lows[7] = 100.5
+    lows[8] = 99.5
+    volumes = [1, 1, 1, 1, 1, 1, 5, 4, 3]
+    for idx, close in enumerate(closes):
+        tf_cache.append(_make_candle(idx, close, high=close + 1, low=lows[idx], volume=volumes[idx]))
+
+    ingest = FakeIngest(tf_cache, _bullish_htf(), _bullish_htf())
+    ingest.set_indicators(
+        {
+            "candles": [],
+            "rsi14": [60.0] * len(closes),
+            "atr5": [2.0] * len(closes),
+            "di_plus": list(range(30, 30 - len(closes), -1)),
+            "di_minus": [10.0] * len(closes),
+            "sma7": [None] * len(closes),
+        }
+    )
+    config = WatchlistConfig.model_validate(watchlist)
+    result = build_openings(ingest, config, "BTCUSDT", "15m", limit=10)
+
+    assert any(signal["type"] == "retest" for signal in result["signals"])
+    retest = next(signal for signal in result["signals"] if signal["type"] == "retest")
+    candle = retest["candle"]
+    assert retest["direction"] == "long"
+    assert retest["entry"] == candle["close"]
+    assert retest["sl"] == candle["low"] * (1 - 0.0015)
+    assert retest["sl_reason"] == "retest_extreme"
+    assert retest["level_event"]["break_index"] == 5
+    assert retest["level_event"]["retest_index"] == 8
+
+
+def test_symbol_setup_can_disable_retest_signal(monkeypatch, tmp_path) -> None:
+    level = 100.0
+    setups = {
+        "continuation": True,
+        "retest": False,
+        "fakeout": True,
+        "setup_candle": True,
+    }
+    watchlist = _watchlist(tmp_path, level, setups=setups)
+    monkeypatch.setenv("WATCHLIST_PATH", str(tmp_path / "watchlist.json"))
+
+    tf_cache = CandleCache(maxlen=2000)
+    closes = [95, 96, 97, 98, 99, 101, 102, 101.5, 101]
+    lows = [close - 1 for close in closes]
+    lows[7] = 100.5
+    lows[8] = 99.5
+    volumes = [1, 1, 1, 1, 1, 1, 5, 4, 3]
+    for idx, close in enumerate(closes):
+        tf_cache.append(_make_candle(idx, close, high=close + 1, low=lows[idx], volume=volumes[idx]))
+
+    ingest = FakeIngest(tf_cache, _bullish_htf(), _bullish_htf())
+    ingest.set_indicators(
+        {
+            "candles": [],
+            "rsi14": [60.0] * len(closes),
+            "atr5": [2.0] * len(closes),
+            "di_plus": list(range(30, 30 - len(closes), -1)),
+            "di_minus": [10.0] * len(closes),
+            "sma7": [None] * len(closes),
+        }
+    )
+    config = WatchlistConfig.model_validate(watchlist)
+    result = build_openings(ingest, config, "BTCUSDT", "15m", limit=10)
+
+    assert all(signal["type"] != "retest" for signal in result["signals"])
 
 
 def test_fakeout_signal(monkeypatch, tmp_path) -> None:

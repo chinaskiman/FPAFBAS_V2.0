@@ -90,7 +90,9 @@ def test_format_alert_message_contains_risk_bias_and_checks() -> None:
         "context": {
             "weekly_bias": "bullish",
             "daily_bias": "neutral",
+            "four_hour_bias": "bearish",
             "hwc_bias": "bullish",
+            "mwc_bias": "neutral",
             "vol_ma5_slope_ok": True,
             "pullback_vol_decline": False,
             "not_at_peak_long": True,
@@ -101,7 +103,7 @@ def test_format_alert_message_contains_risk_bias_and_checks() -> None:
     text = format_alert_message(alert)
     assert "BREAK LONG | BTCUSDT 15m" in text
     assert "Risk (1R): 300.00 (0.45%) | TP@2R: 67700.00" in text
-    assert "Bias: W bullish | D neutral | HWC bullish" in text
+    assert "Bias: W bullish | D neutral | 4H bearish | HWC bullish | MWC neutral" in text
     assert "Checks: VOL_OK=yes | DI_OK=yes | PULLBACK_VOL=no" in text
     assert "Chart:" not in text
     assert "Exchange:" not in text

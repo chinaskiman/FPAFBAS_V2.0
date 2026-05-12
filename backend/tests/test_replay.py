@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from app.candle_cache import Candle, CandleCache
 from app.config import WatchlistConfig
 from app.main import app
-from app.replay import replay_run
+from app.replay import replay_run, replay_summary
 
 
 class FakeIngest:
@@ -30,13 +30,13 @@ class FakeIngest:
         return None
 
 
-def _make_candle(idx: int, close: float, high: float, low: float) -> Candle:
+def _make_candle(idx: int, close: float, high: float, low: float, open_: float | None = None) -> Candle:
     open_time = idx * 60_000
     close_time = open_time + 59_999
     return Candle(
         open_time=open_time,
         close_time=close_time,
-        open=close,
+        open=close if open_ is None else open_,
         high=high,
         low=low,
         close=close,
@@ -68,7 +68,7 @@ def _bullish_htf_candles():
     return _cache_candles_from_series(highs, lows)
 
 
-def _make_watchlist(pinned=None) -> WatchlistConfig:
+def _make_watchlist(pinned=None, rules=None) -> WatchlistConfig:
     return WatchlistConfig.model_validate(
         {
             "symbols": [
@@ -87,6 +87,13 @@ def _make_watchlist(pinned=None) -> WatchlistConfig:
                         "max_levels": 6,
                         "cluster_tol_pct": 0.05,
                         "overrides": {"add": pinned or [], "disable": []},
+                    },
+                    "rules": rules or {
+                        "hwc_filter": True,
+                        "di_peak_filter": True,
+                        "volume_spike_filter": True,
+                        "fakeout_volume_filter": True,
+                        "pullback_volume_filter": True,
                     },
                 }
             ],
@@ -120,16 +127,11 @@ def test_replay_no_lookahead_pivot() -> None:
 
 def test_replay_setup_sequence_triggers() -> None:
     level = 100.0
-    candles = [
-        _make_candle(0, 98, 99, 97),
-        _make_candle(1, 99, 100, 98),
-        _make_candle(2, 101, 102, 100),  # break
-        _make_candle(3, 102, 103, 99),   # retest wick
-        _make_candle(4, 103, 104, 102),
-        _make_candle(5, 104, 105, 103),
-        _make_candle(6, 104, 105, 103),
-        _make_candle(7, 105, 106, 101),  # setup candle
-    ]
+    candles = [_make_candle(idx, 99, 100, 98) for idx in range(98)]
+    candles.append(_make_candle(98, 101, 102, 100.5, open_=100))  # break
+    candles.append(_make_candle(99, 102, 103, 99.5, open_=101))   # retest wick
+    candles.extend(_make_candle(idx, 102, 103, 101) for idx in range(100, 103))
+    candles.append(_make_candle(103, 104, 104.2, 101.4, open_=103))  # setup candle
     ingest = FakeIngest({"1h": candles, "4h": candles, "1d": candles, "1w": candles})
     config = _make_watchlist(pinned=[level])
     result = replay_run(
@@ -144,7 +146,7 @@ def test_replay_setup_sequence_triggers() -> None:
     )
     last_item = result["items"][-1]
     setups = last_item.get("setup_candles") or []
-    assert any(item.get("setup_index") == 7 for item in setups)
+    assert any(item.get("setup_index") == 103 for item in setups)
 
 
 def test_replay_output_stable() -> None:
@@ -202,3 +204,51 @@ def test_replay_step_keeps_skipped_signal_candles() -> None:
     signal_items = [item for item in result["items"] if item.get("signals")]
     assert any(item["index"] == 9 for item in signal_items)
     assert any(signal["type"] == "break" for item in signal_items for signal in item["signals"])
+
+
+def test_replay_summary_counts_retest_signals() -> None:
+    level = 100.0
+    closes = [95, 96, 97, 98, 99, 101, 102, 101.5, 101]
+    lows = [close - 1 for close in closes]
+    lows[7] = 100.5
+    lows[8] = 99.5
+    volumes = [1, 1, 1, 1, 1, 1, 5, 4, 3]
+    candles = [
+        _make_candle_with_volume(
+            idx,
+            close,
+            high=close + 1,
+            low=lows[idx],
+            volume=volumes[idx],
+        )
+        for idx, close in enumerate(closes)
+    ]
+    htf = _bullish_htf_candles()
+    ingest = FakeIngest({"1h": candles, "4h": htf, "1d": htf, "1w": htf})
+    config = _make_watchlist(
+        pinned=[level],
+        rules={
+            "hwc_filter": False,
+            "di_peak_filter": True,
+            "volume_spike_filter": True,
+            "fakeout_volume_filter": True,
+            "pullback_volume_filter": True,
+        },
+    )
+    result = replay_run(
+        ingest,
+        config,
+        "BTCUSDT",
+        "1h",
+        from_ms=candles[0].close_time,
+        to_ms=candles[-1].close_time,
+        warmup=0,
+    )
+    summary = replay_summary(result)
+
+    assert summary["by_type"]["retest"] == 1
+    assert any(
+        signal["type"] == "retest"
+        for item in result["items"]
+        for signal in item.get("signals", [])
+    )

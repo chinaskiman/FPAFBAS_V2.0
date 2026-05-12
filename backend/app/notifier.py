@@ -292,7 +292,9 @@ def format_alert_message(alert: dict) -> str:
 
     weekly_bias = str(context.get("weekly_bias") or alert.get("weekly_bias") or payload.get("weekly_bias") or "-")
     daily_bias = str(context.get("daily_bias") or alert.get("daily_bias") or payload.get("daily_bias") or "-")
+    four_hour_bias = str(context.get("four_hour_bias") or alert.get("four_hour_bias") or payload.get("four_hour_bias") or "-")
     hwc_bias = str(context.get("hwc_bias") or alert.get("hwc_bias") or payload.get("hwc_bias") or "-")
+    mwc_bias = str(context.get("mwc_bias") or alert.get("mwc_bias") or payload.get("mwc_bias") or "-")
 
     if direction == "long":
         di_ok = context.get("not_at_peak_long")
@@ -330,7 +332,7 @@ def format_alert_message(alert: dict) -> str:
     else:
         parts.append("Risk (1R): - | TP@2R: -")
 
-    parts.append(f"Bias: W {weekly_bias} | D {daily_bias} | HWC {hwc_bias}")
+    parts.append(f"Bias: W {weekly_bias} | D {daily_bias} | 4H {four_hour_bias} | HWC {hwc_bias} | MWC {mwc_bias}")
     parts.append(
         "Checks: "
         f"VOL_OK={_fmt_bool(vol_ok)} | "

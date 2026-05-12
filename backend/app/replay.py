@@ -6,7 +6,7 @@ from typing import Dict, List
 
 from .candle_cache import Candle
 from .di_peak import DI_PEAK_WINDOW_DEFAULT, compute_di_peak_flags
-from .hwc import compute_hwc_bias
+from .hwc import compute_hwc_bias, compute_mwc_bias
 from .indicators import atr, dmi_adx, rsi, sma
 from .level_events import detect_level_events
 from .levels import HTF_TFS, apply_overrides, compute_levels
@@ -93,6 +93,8 @@ def replay_run(
         volumes = [candle.volume for candle in window]
 
         sma7 = sma(closes, 7)
+        sma25 = sma(closes, 25)
+        sma99 = sma(closes, 99)
 
         rsi_series = rsi(closes, 14)
         atr_series = atr(highs, lows, closes, 5)
@@ -119,10 +121,14 @@ def replay_run(
 
         weekly = candles_by_tf.get("1w", [])
         daily = candles_by_tf.get("1d", [])
+        four_hour = candles_by_tf.get("4h", [])
         hwc = compute_hwc_bias(weekly, daily)
+        mwc = compute_mwc_bias(daily, four_hour)
         hwc_bias = hwc["hwc_bias"]
         weekly_bias = hwc.get("weekly", {}).get("bias")
         daily_bias = hwc.get("daily", {}).get("bias")
+        four_hour_bias = mwc.get("four_hour", {}).get("bias")
+        mwc_bias = mwc["mwc_bias"]
 
         context = {
             "vol_ma5_slope_ok": vol_metrics["vol_ma5_slope_ok"],
@@ -135,8 +141,11 @@ def replay_run(
             "atr_mult": atr_mult,
             "atr_stop_distance": atr_stop_distance,
             "hwc_bias": hwc_bias,
+            "mwc_bias": mwc_bias,
             "weekly_bias": weekly_bias,
             "daily_bias": daily_bias,
+            "four_hour_bias": four_hour_bias,
+            "mwc": mwc,
             "rules": rules,
             "setups": setups,
         }
@@ -145,7 +154,7 @@ def replay_run(
         if not symbol_config.rules.fakeout_volume_filter:
             fakeout_volume_series = [True] * len(window)
         events = detect_level_events(window, final_levels, slope_ok_series=fakeout_volume_series)
-        setup_items = detect_setup_candles(window, sma7, events, sl_buffer_pct=0.0015)
+        setup_items = detect_setup_candles(window, sma7, sma25, sma99, events, sl_buffer_pct=0.0015)
 
         signals = build_signals_from_state(
             window,
@@ -171,8 +180,10 @@ def replay_run(
             "setup_candles": setup_items,
             "signals": signals,
             "hwc_bias": hwc_bias,
+            "mwc_bias": mwc_bias,
             "weekly_bias": weekly_bias,
             "daily_bias": daily_bias,
+            "four_hour_bias": four_hour_bias,
             "filters": {
                 "vol_ok": vol_metrics["vol_ma5_slope_ok"],
                 "volume_spike_ok": vol_metrics["vol_highest10"],
@@ -202,7 +213,7 @@ def replay_summary(result: dict) -> dict:
     items = result.get("items", [])
     total_steps = len(items)
     signals_total = 0
-    by_type = {"break": 0, "setup": 0, "fakeout": 0}
+    by_type = {"break": 0, "retest": 0, "setup": 0, "fakeout": 0}
     by_direction = {"long": 0, "short": 0}
     filter_pass = {"vol_ok_true": 0, "di_ok_true": 0, "rsi_ok_true": 0, "atr_ok_true": 0}
     by_day: Dict[str, int] = {}
