@@ -14,7 +14,7 @@ Requirements: Python 3.11+
 ```powershell
 cd backend
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate
 pip install -r requirements.txt
 pytest
 uvicorn app.main:app --reload --port 8000
