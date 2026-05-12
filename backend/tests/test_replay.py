@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app import main as main_module
 from app.candle_cache import Candle, CandleCache
 from app.config import WatchlistConfig
 from app.main import app
@@ -302,3 +303,65 @@ def test_replay_performance_report_groups_outcomes_and_quality() -> None:
     assert by_type["retest"]["wins"] == 1
     by_quality = {item["key"]: item for item in report["groups"]["by_quality"]}
     assert by_quality["A"]["trades"] == 1
+
+
+def test_replay_summary_api_uses_full_timeline_for_performance(monkeypatch) -> None:
+    sampled_result = {
+        "symbol": "BTCUSDT",
+        "tf": "1h",
+        "step": 2,
+        "items": [
+            {
+                "time": 1000,
+                "candle": {"high": 101.0, "low": 99.0},
+                "signals": [
+                    {
+                        "type": "retest",
+                        "direction": "long",
+                        "time": 1000,
+                        "entry": 100.0,
+                        "sl": 95.0,
+                        "context": {
+                            "weekly_bias": "bullish",
+                            "daily_bias": "bullish",
+                            "four_hour_bias": "bullish",
+                            "hwc_bias": "bullish",
+                            "mwc_bias": "bullish",
+                            "volume_spike_ok": True,
+                            "pullback_vol_decline": True,
+                            "not_at_peak_long": True,
+                            "rsi_distance": 20.0,
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+    full_result = {
+        **sampled_result,
+        "step": 1,
+        "items": [
+            *sampled_result["items"],
+            {"time": 2000, "candle": {"high": 111.0, "low": 99.0}, "signals": []},
+        ],
+    }
+    calls = []
+
+    def fake_replay_run(*_args, step=1, **_kwargs):
+        calls.append(step)
+        return full_result if step == 1 else sampled_result
+
+    monkeypatch.setattr(main_module, "load_watchlist", lambda: object())
+    monkeypatch.setattr(main_module, "replay_run", fake_replay_run)
+
+    with TestClient(app) as client:
+        app.state.ingest = FakeIngest({})
+        response = client.get("/api/replay_summary/BTCUSDT/1h?from_ms=1&to_ms=3000&step=2&warmup=0")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert calls == [2, 1]
+    assert payload["step"] == 2
+    assert payload["performance"]["trades"] == 1
+    assert payload["performance"]["wins"] == 1
+    assert payload["performance"]["sample_warning"] is False

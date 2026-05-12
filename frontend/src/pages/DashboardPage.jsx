@@ -1216,9 +1216,13 @@ export default function DashboardPage({ view = "dashboard" }) {
 
   const replayItems = Array.isArray(replayData?.items) ? replayData.items : [];
   const replayItem = replayItems[replayIndex];
+  const backendReplayTrades = replaySummary?.performance?.trade_rows;
   const replayTradeOutcomes = useMemo(
-    () => buildReplayTradeOutcomes(replayItems, replayData?.symbol, replayData?.tf),
-    [replayItems, replayData?.symbol, replayData?.tf]
+    () =>
+      Array.isArray(backendReplayTrades)
+        ? [...backendReplayTrades].sort((a, b) => Number(b.signal_time ?? 0) - Number(a.signal_time ?? 0))
+        : buildReplayTradeOutcomes(replayItems, replayData?.symbol, replayData?.tf),
+    [backendReplayTrades, replayItems, replayData?.symbol, replayData?.tf]
   );
   const replayTradeRows = useMemo(() => {
     let rows = [...replayTradeOutcomes];

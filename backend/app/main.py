@@ -1317,6 +1317,22 @@ def api_replay_summary(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     summary = replay_summary(result)
+    if step != 1:
+        try:
+            performance_result = replay_run(
+                ingest,
+                config,
+                symbol,
+                tf,
+                from_ms=from_ms,
+                to_ms=to_ms,
+                step=1,
+                warmup=warmup,
+                include_debug=bool(debug),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        summary["performance"] = replay_performance_report(performance_result)
     summary.update(
         {
             "symbol": symbol.upper(),
