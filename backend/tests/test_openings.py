@@ -82,7 +82,6 @@ def _watchlist(tmp_path: Path, level: float, rules: dict | None = None, setups: 
                     "setup_candle": True,
                 },
                 "rules": rules or {
-                    "hwc_filter": True,
                     "di_peak_filter": True,
                     "volume_spike_filter": True,
                     "fakeout_volume_filter": True,
@@ -103,7 +102,7 @@ def _watchlist(tmp_path: Path, level: float, rules: dict | None = None, setups: 
     return watchlist
 
 
-def test_hwc_neutral_suppresses_signals(monkeypatch, tmp_path) -> None:
+def test_hwc_neutral_does_not_suppress_signals(monkeypatch, tmp_path) -> None:
     level = 100.0
     watchlist = _watchlist(tmp_path, level)
     monkeypatch.setenv("WATCHLIST_PATH", str(tmp_path / "watchlist.json"))
@@ -132,47 +131,12 @@ def test_hwc_neutral_suppresses_signals(monkeypatch, tmp_path) -> None:
     assert result["weekly_bias"] == "neutral"
     assert result["daily_bias"] == "neutral"
     assert result["four_hour_bias"] == "neutral"
-    assert result["signals"] == []
-
-
-def test_symbol_rule_can_disable_hwc_filter(monkeypatch, tmp_path) -> None:
-    level = 100.0
-    rules = {
-        "hwc_filter": False,
-        "di_peak_filter": True,
-        "volume_spike_filter": True,
-        "fakeout_volume_filter": True,
-        "pullback_volume_filter": True,
-    }
-    watchlist = _watchlist(tmp_path, level, rules=rules)
-    monkeypatch.setenv("WATCHLIST_PATH", str(tmp_path / "watchlist.json"))
-
-    tf_cache = CandleCache(maxlen=2000)
-    volumes = [1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
-    closes = [95, 96, 97, 98, 99, 99, 99, 99, 99, 101]
-    for idx, close in enumerate(closes):
-        tf_cache.append(_make_candle(idx, close, high=close + 1, low=close - 1, volume=volumes[idx]))
-    neutral_cache = CandleCache(maxlen=2000)
-    ingest = FakeIngest(tf_cache, neutral_cache, neutral_cache)
-    ingest.set_indicators(
-        {
-            "candles": [],
-            "rsi14": [60.0] * len(closes),
-            "atr5": [2.0] * len(closes),
-            "di_plus": list(range(30, 30 - len(closes), -1)),
-            "di_minus": [10.0] * len(closes),
-            "sma7": [None] * len(closes),
-        }
-    )
-    config = WatchlistConfig.model_validate(watchlist)
-    result = build_openings(ingest, config, "BTCUSDT", "15m", limit=10)
     assert any(signal["type"] == "break" for signal in result["signals"])
 
 
 def test_symbol_rule_can_disable_di_peak_filter(monkeypatch, tmp_path) -> None:
     level = 100.0
     rules = {
-        "hwc_filter": True,
         "di_peak_filter": False,
         "volume_spike_filter": True,
         "fakeout_volume_filter": True,

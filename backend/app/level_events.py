@@ -39,6 +39,7 @@ def detect_level_events(
     candles: List[Candle],
     levels: Iterable[float],
     slope_ok_series: Optional[List[Optional[bool]]] = None,
+    level_roles: Optional[dict[float, str]] = None,
     max_retest_bars: int = 20,
     max_fakeout_bars: int = 10,
 ) -> List[dict]:
@@ -52,6 +53,9 @@ def detect_level_events(
     events: List[dict] = []
 
     for level in levels_list:
+        role = _role_for_level(level, level_roles)
+        allow_break_up = role in (None, "resistance", "mixed")
+        allow_break_down = role in (None, "support", "mixed")
         last_break = None
         direction = None
         break_index = None
@@ -95,7 +99,7 @@ def detect_level_events(
                         last_fakeout = {"index": idx, "time": close_time, "close": close}
                         continue
 
-            if prev_close <= level and close > level:
+            if allow_break_up and prev_close <= level and close > level:
                 last_break = {"index": idx, "time": close_time, "close": close}
                 direction = "up"
                 break_index = idx
@@ -105,7 +109,7 @@ def detect_level_events(
                 last_fakeout = None
                 continue
 
-            if prev_close >= level and close < level:
+            if allow_break_down and prev_close >= level and close < level:
                 last_break = {"index": idx, "time": close_time, "close": close}
                 direction = "down"
                 break_index = idx
@@ -132,6 +136,7 @@ def detect_level_events(
         events.append(
             {
                 "level": level,
+                "role": role,
                 "direction": direction,
                 "last_break": last_break,
                 "retest_touched": retest_touched,
@@ -142,3 +147,16 @@ def detect_level_events(
         )
 
     return events
+
+
+def _role_for_level(level: float, roles: Optional[dict[float, str]]) -> Optional[str]:
+    if not roles:
+        return None
+    if level in roles:
+        return roles[level]
+    for ref, role in roles.items():
+        if ref == 0 and level == 0:
+            return role
+        if ref and abs(level - ref) / abs(ref) <= 1e-12:
+            return role
+    return None

@@ -90,7 +90,6 @@ def _make_watchlist(pinned=None, rules=None) -> WatchlistConfig:
                         "overrides": {"add": pinned or [], "disable": []},
                     },
                     "rules": rules or {
-                        "hwc_filter": True,
                         "di_peak_filter": True,
                         "volume_spike_filter": True,
                         "fakeout_volume_filter": True,
@@ -103,27 +102,28 @@ def _make_watchlist(pinned=None, rules=None) -> WatchlistConfig:
     )
 
 
-def test_replay_no_lookahead_pivot() -> None:
-    highs = [1.0, 2.0, 5.0, 2.0, 1.0]
-    lows = [0.5] * len(highs)
-    candles = [_make_candle(i, close=highs[i], high=highs[i], low=lows[i]) for i in range(len(highs))]
-    ingest = FakeIngest({"4h": candles})
+def test_replay_uses_only_closed_htf_candles_for_pattern_levels() -> None:
+    candles = [
+        _make_candle(0, close=99.0, high=101.0, low=98.0, open_=100.0),
+        _make_candle(1, close=103.0, high=104.0, low=98.0, open_=99.0),
+        _make_candle(2, close=101.0, high=104.0, low=100.0, open_=104.0),
+    ]
+    ingest = FakeIngest({"4h": candles, "15m": candles})
     config = _make_watchlist()
     result = replay_run(
         ingest,
         config,
         "BTCUSDT",
-        "4h",
+        "15m",
         from_ms=candles[0].close_time,
         to_ms=candles[-1].close_time,
         warmup=0,
     )
     items = result["items"]
     assert len(items) == len(candles)
-    levels_before = items[2]["levels"]
-    levels_after = items[4]["levels"]
-    assert not any(abs(level - 5.0) < 1e-6 for level in levels_before)
-    assert any(abs(level - 5.0) < 1e-6 for level in levels_after)
+    assert items[0]["levels"] == []
+    assert items[1]["levels"] == [99.0]
+    assert items[2]["levels"] == [99.0, 104.0]
 
 
 def test_replay_setup_sequence_triggers() -> None:
@@ -229,7 +229,6 @@ def test_replay_summary_counts_retest_signals() -> None:
     config = _make_watchlist(
         pinned=[level],
         rules={
-            "hwc_filter": False,
             "di_peak_filter": True,
             "volume_spike_filter": True,
             "fakeout_volume_filter": True,

@@ -17,6 +17,8 @@
         "auto": true,
         "max_levels": 12,
         "cluster_tol_pct": 0.003,
+        "htf_timeframe": "auto",
+        "lookback_window": 14,
         "overrides": {
           "add": [],
           "disable": []
@@ -40,6 +42,8 @@
         "auto": true,
         "max_levels": 12,
         "cluster_tol_pct": 0.003,
+        "htf_timeframe": "auto",
+        "lookback_window": 14,
         "overrides": {
           "add": [],
           "disable": []
@@ -63,6 +67,8 @@
         "auto": true,
         "max_levels": 12,
         "cluster_tol_pct": 0.003,
+        "htf_timeframe": "auto",
+        "lookback_window": 14,
         "overrides": {
           "add": [],
           "disable": []
@@ -86,6 +92,8 @@
         "auto": true,
         "max_levels": 12,
         "cluster_tol_pct": 0.003,
+        "htf_timeframe": "auto",
+        "lookback_window": 14,
         "overrides": {
           "add": [],
           "disable": []
@@ -100,11 +108,13 @@
   "quality": {
     "cooldown_minutes_by_type": {
       "break": 60,
+      "retest": 45,
       "setup": 45,
       "fakeout": 60
     },
     "min_score_by_type": {
       "break": 60,
+      "retest": 40,
       "setup": 55,
       "fakeout": 55
     },

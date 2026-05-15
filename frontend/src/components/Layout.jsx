@@ -2,17 +2,22 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useState } from "react";
 
 const navItems = [
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/replay", label: "Replay" },
+  { to: "/dashboard", label: "Signals" },
+  { to: "/replay", label: "Replay Lab" },
   { to: "/journal", label: "Journal" },
-  { to: "/levels", label: "Levels" },
-  { to: "/forward-test", label: "Forward Test" },
+  { to: "/levels", label: "Active S/R" },
+  { to: "/forward-test", label: "Paper Trades" },
   { to: "/settings", label: "Settings" },
   { to: "/ops", label: "Ops" }
 ];
 
-export default function Layout() {
+export default function Layout({ authRequired = false, onLogout }) {
   const [navOpen, setNavOpen] = useState(false);
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+    onLogout?.();
+  };
 
   return (
     <div className={`layout ${navOpen ? "nav-open" : ""}`}>
@@ -49,6 +54,11 @@ export default function Layout() {
               </NavLink>
             ))}
           </div>
+          {authRequired ? (
+            <button className="btn btn-small" type="button" onClick={handleLogout}>
+              Sign out
+            </button>
+          ) : null}
         </header>
         <main className="content">
           <Outlet />

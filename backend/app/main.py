@@ -39,8 +39,16 @@ from .level_events import detect_level_events
 from .setup_candles import detect_setup_candles
 from .indicators import sma
 from .openings import build_openings
-from .levels import HTF_TFS, apply_overrides, build_levels_detailed, compute_levels
-from .ops import require_admin
+from .levels import HTF_TFS, apply_overrides, build_levels_detailed, compute_levels, level_roles_from_details
+from .ops import (
+    SESSION_COOKIE_NAME,
+    auth_required,
+    create_session,
+    delete_session,
+    require_admin,
+    session_valid,
+    verify_login,
+)
 from .poller_lock import PollerFileLock
 from .journal import JournalStore
 from .storage import alerts_stats, check_db, get_alert, init_db, list_alerts
@@ -78,9 +86,23 @@ else:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def require_app_login(request: Request, call_next):
+    if not auth_required():
+        return await call_next(request)
+    path = request.url.path
+    public_paths = {"/health", "/healthz", "/readyz", "/api/auth/me", "/api/auth/login", "/api/auth/logout"}
+    if path in public_paths or path.startswith("/docs") or path.startswith("/openapi"):
+        return await call_next(request)
+    if path.startswith("/api/") and not session_valid(request.cookies.get(SESSION_COOKIE_NAME)):
+        return Response(status_code=401, content='{"detail":"Login required"}', media_type="application/json")
+    return await call_next(request)
 
 
 @app.on_event("startup")
@@ -200,6 +222,43 @@ def readyz() -> dict:
         "lock_acquired": lock_acquired,
         "ts": int(time.time() * 1000),
     }
+
+
+@app.get("/api/auth/me")
+def api_auth_me(request: Request) -> dict:
+    required = auth_required()
+    authenticated = not required or session_valid(request.cookies.get(SESSION_COOKIE_NAME))
+    return {"auth_required": required, "authenticated": authenticated}
+
+
+@app.post("/api/auth/login")
+async def api_auth_login(request: Request) -> Response:
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001
+        payload = {}
+    username = str(payload.get("username") or "")
+    password = str(payload.get("password") or "")
+    if not verify_login(username, password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    token = create_session()
+    response = Response(content='{"ok":true}', media_type="application/json")
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        token,
+        max_age=12 * 60 * 60,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
+
+
+@app.post("/api/auth/logout")
+def api_auth_logout(request: Request) -> Response:
+    delete_session(request.cookies.get(SESSION_COOKIE_NAME))
+    response = Response(content='{"ok":true}', media_type="application/json")
+    response.delete_cookie(SESSION_COOKIE_NAME)
+    return response
 
 
 @app.get("/api/watchlist")
@@ -704,6 +763,9 @@ def api_chart_bundle(symbol: str, tf: str, limit: int = 500) -> dict:
         candles_by_tf,
         symbol_config.levels.cluster_tol_pct,
         symbol_config.levels.max_levels,
+        entry_tf=tf,
+        htf_timeframe=symbol_config.levels.htf_timeframe,
+        lookback=symbol_config.levels.lookback_window,
     )
     tol_pct_used = meta.get("tol_pct_used", symbol_config.levels.cluster_tol_pct)
     overrides = symbol_config.levels.overrides
@@ -715,7 +777,8 @@ def api_chart_bundle(symbol: str, tf: str, limit: int = 500) -> dict:
         tol_pct_used,
     )
 
-    events = detect_level_events(candles, merged["final_levels"])
+    level_roles = level_roles_from_details(final_levels_detailed)
+    events = detect_level_events(candles, merged["final_levels"], level_roles=level_roles)
     setup_items = detect_setup_candles(
         candles,
         indicators.get("sma7", []),
@@ -863,7 +926,7 @@ def api_indicators(symbol: str, tf: str, limit: int = 200) -> dict:
 
 
 @app.get("/api/levels/{symbol}")
-def api_levels(symbol: str, debug: int = 0) -> dict:
+def api_levels(symbol: str, debug: int = 0, entry_tf: str = "15m") -> dict:
     ingest = getattr(app.state, "ingest", None)
     if ingest is None:
         raise HTTPException(status_code=503, detail="Ingestion not initialized")
@@ -883,6 +946,9 @@ def api_levels(symbol: str, debug: int = 0) -> dict:
         candles_by_tf,
         symbol_config.levels.cluster_tol_pct,
         symbol_config.levels.max_levels,
+        entry_tf=entry_tf,
+        htf_timeframe=symbol_config.levels.htf_timeframe,
+        lookback=symbol_config.levels.lookback_window,
     )
     last_close_used = meta.get("last_close_used")
     below_count = meta.get("below_count", 0)
@@ -898,17 +964,18 @@ def api_levels(symbol: str, debug: int = 0) -> dict:
     )
     payload = {
         "symbol": symbol.upper(),
-        "cluster_tol_pct": symbol_config.levels.cluster_tol_pct,
+        "algorithm": meta.get("algorithm"),
+        "entry_tf": entry_tf,
+        "htf_timeframe": meta.get("htf_timeframe"),
+        "lookback_window": meta.get("lookback"),
+        "level_match_tol_pct": symbol_config.levels.cluster_tol_pct,
         "tol_pct_used": tol_pct_used,
         "max_levels": symbol_config.levels.max_levels,
         "last_close_used": last_close_used,
-        "dense_count_near_price": meta.get("dense_count_near_price"),
-        "merge_triggered": meta.get("merge_triggered"),
-        "merge_tol_pct_used": meta.get("merge_tol_pct_used"),
-        "forced_count": meta.get("forced_count"),
-        "forced_centers": meta.get("forced_centers"),
         "below_count": below_count,
         "above_count": above_count,
+        "support": meta.get("support"),
+        "resistance": meta.get("resistance"),
         "auto_levels": auto_levels,
         "pinned_levels": merged["pinned_levels"],
         "disabled_levels": merged["disabled_levels"],
@@ -916,36 +983,28 @@ def api_levels(symbol: str, debug: int = 0) -> dict:
         "final_levels_detailed": final_levels_detailed,
     }
     if debug:
-        payload["atr5_last_used"] = meta.get("atr5_last_used")
-        payload["atr_pct"] = meta.get("atr_pct")
-        payload["tol_pct_raw"] = meta.get("tol_pct_raw")
-        clusters_debug = []
+        pattern_debug = []
         for cluster in sorted(
             clusters,
-            key=lambda item: (-item.get("strength", 0.0), -item.get("last_touch_index", 0), item["center"]),
+            key=lambda item: (item.get("role", ""), item["center"]),
         ):
-            clusters_debug.append(
+            pattern_debug.append(
                 {
                     "center": cluster.get("center"),
-                    "touches": cluster.get("touches"),
-                    "strength": cluster.get("strength"),
-                    "rank_score": cluster.get("rank_score"),
-                    "tf_authority_score": cluster.get("tf_authority_score"),
-                    "tf_counts": cluster.get("tf_counts"),
-                    "last_touch_index": cluster.get("last_touch_index"),
-                    "rejections": cluster.get("rejections"),
-                    "last_rejection_index": cluster.get("last_rejection_index"),
-                    "flips": cluster.get("flips"),
-                    "last_flip_index": cluster.get("last_flip_index"),
-                    "score_tf_used": cluster.get("score_tf_used"),
+                    "role": cluster.get("role"),
+                    "htf": cluster.get("htf"),
+                    "pattern": cluster.get("pattern"),
+                    "anchor_close": cluster.get("anchor_close"),
+                    "trigger_open": cluster.get("trigger_open"),
+                    "source_close_time": cluster.get("source_close_time"),
                 }
             )
-        payload["clusters_debug"] = clusters_debug
+        payload["pattern_debug"] = pattern_debug
     return payload
 
 
 @app.get("/api/debug/levels/{symbol}")
-def api_debug_levels(symbol: str) -> dict:
+def api_debug_levels(symbol: str, entry_tf: str = "15m") -> dict:
     ingest = getattr(app.state, "ingest", None)
     if ingest is None:
         raise HTTPException(status_code=503, detail="Ingestion not initialized")
@@ -965,10 +1024,15 @@ def api_debug_levels(symbol: str) -> dict:
         candles_by_tf,
         symbol_config.levels.cluster_tol_pct,
         symbol_config.levels.max_levels,
+        entry_tf=entry_tf,
+        htf_timeframe=symbol_config.levels.htf_timeframe,
+        lookback=symbol_config.levels.lookback_window,
     )
     return {
         "symbol": symbol.upper(),
-        "clusters": clusters,
+        "entry_tf": entry_tf,
+        "htf_timeframe": _meta.get("htf_timeframe"),
+        "patterns": clusters,
         "selected": selected,
     }
 
@@ -1136,19 +1200,30 @@ def api_level_events(
     for htf in HTF_TFS:
         htf_cache = ingest.get_cache(symbol, htf)
         candles_by_tf[htf] = htf_cache.list_all() if htf_cache else []
-    auto_levels, _selected, _clusters, meta = compute_levels(
+    auto_levels, _selected, clusters, meta = compute_levels(
         candles_by_tf,
         symbol_config.levels.cluster_tol_pct,
         symbol_config.levels.max_levels,
+        entry_tf=tf,
+        htf_timeframe=symbol_config.levels.htf_timeframe,
+        lookback=symbol_config.levels.lookback_window,
     )
     tol_pct_used = meta.get("tol_pct_used", symbol_config.levels.cluster_tol_pct)
     overrides = symbol_config.levels.overrides
     merged = apply_overrides(auto_levels, overrides.add, overrides.disable, tol_pct_used)
     final_levels = merged["final_levels"]
+    final_levels_detailed = build_levels_detailed(
+        final_levels,
+        clusters,
+        meta.get("last_close_used"),
+        tol_pct_used,
+    )
+    level_roles = level_roles_from_details(final_levels_detailed)
 
     events = detect_level_events(
         candles,
         final_levels,
+        level_roles=level_roles,
         max_retest_bars=max_retest_bars,
         max_fakeout_bars=max_fakeout_bars,
     )
@@ -1160,6 +1235,7 @@ def api_level_events(
         "max_retest_bars": max_retest_bars,
         "max_fakeout_bars": max_fakeout_bars,
         "levels": final_levels,
+        "levels_detailed": final_levels_detailed,
         "events": events,
         "timestamp": timestamp,
     }
@@ -1215,17 +1291,27 @@ def api_setup_candles(symbol: str, tf: str, limit: int = 300) -> dict:
     for htf in HTF_TFS:
         htf_cache = ingest.get_cache(symbol, htf)
         candles_by_tf[htf] = htf_cache.list_all() if htf_cache else []
-    auto_levels, _, _, meta = compute_levels(
+    auto_levels, _, clusters, meta = compute_levels(
         candles_by_tf,
         symbol_config.levels.cluster_tol_pct,
         symbol_config.levels.max_levels,
+        entry_tf=tf,
+        htf_timeframe=symbol_config.levels.htf_timeframe,
+        lookback=symbol_config.levels.lookback_window,
     )
     tol_pct_used = meta.get("tol_pct_used", symbol_config.levels.cluster_tol_pct)
     overrides = symbol_config.levels.overrides
     merged = apply_overrides(auto_levels, overrides.add, overrides.disable, tol_pct_used)
     final_levels = merged["final_levels"]
+    final_levels_detailed = build_levels_detailed(
+        final_levels,
+        clusters,
+        meta.get("last_close_used"),
+        tol_pct_used,
+    )
+    level_roles = level_roles_from_details(final_levels_detailed)
 
-    events = detect_level_events(candles, final_levels)
+    events = detect_level_events(candles, final_levels, level_roles=level_roles)
     sma25 = sma(closes, 25)
     sma99 = sma(closes, 99)
     items = detect_setup_candles(candles, sma7, sma25, sma99, events, sl_buffer_pct=0.0015)

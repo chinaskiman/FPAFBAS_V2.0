@@ -285,6 +285,7 @@ def format_alert_message(alert: dict) -> str:
     direction_tag = direction.upper() if direction in {"long", "short"} else "-"
 
     level = alert.get("level", payload.get("level"))
+    level_role = str(payload.get("level_role") or payload.get("level_event", {}).get("role") or "").lower()
     entry = _to_float(alert.get("entry", payload.get("entry")))
     sl = _to_float(alert.get("sl", payload.get("sl")))
     sl_reason = str(alert.get("sl_reason", payload.get("sl_reason")) or "-")
@@ -308,6 +309,10 @@ def format_alert_message(alert: dict) -> str:
     pullback_ok = context.get("pullback_vol_decline")
     rsi_distance = context.get("rsi_distance")
     atr_stop_distance = context.get("atr_stop_distance")
+    sr_htf = context.get("sr_htf_timeframe")
+    sr_lookback = context.get("sr_lookback")
+    active_support = context.get("active_support") or {}
+    active_resistance = context.get("active_resistance") or {}
 
     risk = abs(entry - sl) if entry is not None and sl is not None else None
     risk_pct = (risk / abs(entry)) if risk is not None and entry not in (None, 0.0) else None
@@ -322,7 +327,15 @@ def format_alert_message(alert: dict) -> str:
     parts.append(f"{signal_type} {direction_tag} | {symbol} {tf}")
     parts.append(f"Time: {_fmt_time_ms(time_ms)}")
     if level is not None:
-        parts.append(f"Level: {_fmt_num(level)}")
+        label = _level_label(level_role, direction)
+        parts.append(f"{label}: {_fmt_num(level)}")
+    if sr_htf:
+        sr_bits = [f"HTF: {sr_htf}", f"lookback: {sr_lookback or '-'}"]
+        if active_support:
+            sr_bits.append(f"support: {_fmt_num(active_support.get('center'))}")
+        if active_resistance:
+            sr_bits.append(f"resistance: {_fmt_num(active_resistance.get('center'))}")
+        parts.append("S/R: " + " | ".join(sr_bits))
 
     price_bits = [f"Entry: {_fmt_num(entry)}", f"SL: {_fmt_num(sl)}", f"SL reason: {sl_reason}"]
     parts.append(" | ".join(price_bits))
@@ -332,7 +345,9 @@ def format_alert_message(alert: dict) -> str:
     else:
         parts.append("Risk (1R): - | TP@2R: -")
 
-    parts.append(f"Bias: W {weekly_bias} | D {daily_bias} | 4H {four_hour_bias} | HWC {hwc_bias} | MWC {mwc_bias}")
+    parts.append(
+        f"Bias context (not a filter): W {weekly_bias} | D {daily_bias} | 4H {four_hour_bias} | HWC {hwc_bias} | MWC {mwc_bias}"
+    )
     parts.append(
         "Checks: "
         f"VOL_OK={_fmt_bool(vol_ok)} | "
@@ -349,3 +364,11 @@ def format_alert_message(alert: dict) -> str:
         parts.append("Indicators: " + " | ".join(indicator_bits))
 
     return "\n".join(parts)
+
+
+def _level_label(level_role: str, direction: str) -> str:
+    if level_role == "resistance" or direction == "long":
+        return "Resistance"
+    if level_role == "support" or direction == "short":
+        return "Support"
+    return "Level"

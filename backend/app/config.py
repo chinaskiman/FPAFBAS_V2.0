@@ -22,7 +22,6 @@ class SetupsConfig(BaseModel):
 
 
 class RulesConfig(BaseModel):
-    hwc_filter: bool = True
     di_peak_filter: bool = True
     volume_spike_filter: bool = True
     fakeout_volume_filter: bool = True
@@ -38,6 +37,8 @@ class LevelsConfig(BaseModel):
     auto: bool
     max_levels: int = Field(ge=1)
     cluster_tol_pct: float = Field(gt=0, lt=1)
+    htf_timeframe: Literal["auto", "1d", "4h"] = "auto"
+    lookback_window: int = Field(default=14, ge=2)
     overrides: LevelOverrides
 
 

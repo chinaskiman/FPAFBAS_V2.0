@@ -82,6 +82,7 @@ Common settings:
 - `TELEGRAM_DISABLE_WEB_PAGE_PREVIEW` (`true|false`, default: `true`)
 - `TELEGRAM_MESSAGE_THREAD_ID` (optional, for forum-topic messages)
 - `ADMIN_TOKEN` (required for operator endpoints)
+- `APP_LOGIN_USERNAME` and `APP_LOGIN_PASSWORD` (optional UI/API login; when both are set, `/api/*` routes require a browser session)
 - `CORS_ORIGINS` (comma-separated, default: `http://localhost:5173`)
 
 Example `backend/.env`:
@@ -91,14 +92,18 @@ TELEGRAM_CHAT_ID=123456789
 TELEGRAM_ENABLED=true
 POLL_SECONDS=15
 ADMIN_TOKEN=change-me
+APP_LOGIN_USERNAME=admin
+APP_LOGIN_PASSWORD=change-this-password
 CORS_ORIGINS=http://localhost,http://127.0.0.1
 ```
 
 ## How It Works
 
 - On startup, backend bootstraps klines from Binance REST and opens WS streams for closed 15m/1h/4h/1d candles.
-- Candle caches feed indicators, pivots, levels, and signal detection.
-- HWC is the hard Weekly+Daily direction filter; MWC is Daily+4H context for alerts and replay analysis.
+- Candle caches feed indicators, candle-pattern S/R levels, and signal detection.
+- S/R detection uses confirmed HTF candles only: 1h entries use Daily levels, and 15m entries use 4H levels.
+- The S/R algorithm scans the latest completed HTF candles for bullish->bearish resistance and bearish->bullish support patterns. It uses only candle opens, closes, and color.
+- HWC and MWC are context/analytics only; they do not suppress or filter entries.
 - DI peak uses Option 1 from the PRD: DI pivot highs are clustered into peak zones and current DI is checked within 3% proximity.
 - Setup candle detection requires SMA7/25/99, directional wick >= 1.5x body, and SMA7 behind the candle body.
 - Alerts are persisted to SQLite and de-duplicated before notifying Telegram.
@@ -112,7 +117,7 @@ Core:
 - `GET /readyz`
 - `GET /api/watchlist` / `PUT /api/watchlist`
 - `GET /api/candles/{symbol}/{tf}?limit=500` (time in ms)
-- `GET /api/levels/{symbol}?debug=1`
+- `GET /api/levels/{symbol}?entry_tf=15m&debug=1`
 - `GET /api/openings/{symbol}/{tf}?limit=300`
 - `GET /api/alerts?limit=100&offset=0` / `GET /api/alerts/{id}`
 
@@ -146,8 +151,8 @@ Replay:
 ## Frontend Highlights
 
 - Watchlist management (add/remove symbols, edit entry TFs).
-- Chart Workspace with candlesticks, SMA7, S/R zones, and signal markers.
-- Replay UI with scrubber, signal details, backend performance cards, and setup-type performance table.
+- Chart Workspace with candlesticks, SMA7/21/50, DI+/DI-/ADX, active support/resistance lines, and signal markers.
+- Replay UI with date/time lookback windows, 15m and 1h entry results, trade outcome rows, backend performance cards, and setup-type performance tables.
 - Alert review with filtering/pagination and Telegram message preview.
 - Journal page with filters, detail drawer, and JSONL export (admin token required).
 - Forward Test page with live paper-trading metrics, equity/drawdown charts, regime/time analytics, and trade table export.

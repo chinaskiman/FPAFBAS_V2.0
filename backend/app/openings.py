@@ -4,7 +4,7 @@ from .di_peak import DI_PEAK_WINDOW_DEFAULT, compute_di_peak_flags
 from .hwc import compute_hwc_bias, compute_mwc_bias
 from .indicators import sma
 from .level_events import detect_level_events
-from .levels import HTF_TFS, apply_overrides, compute_levels
+from .levels import HTF_TFS, apply_overrides, build_levels_detailed, compute_levels, level_roles_from_details
 from .rsi_filters import atr_multiplier_from_rsi, rsi_distance_from_50
 from .signal_builder import build_signals_from_state
 from .setup_candles import detect_setup_candles
@@ -115,20 +115,40 @@ def build_openings(ingest, config, symbol: str, tf: str, limit: int = 300) -> di
     for htf in HTF_TFS:
         htf_cache = ingest.get_cache(symbol_upper, htf)
         candles_by_tf[htf] = htf_cache.list_all() if htf_cache else []
-    auto_levels, _, _, meta = compute_levels(
+    auto_levels, _, clusters, meta = compute_levels(
         candles_by_tf,
         symbol_config.levels.cluster_tol_pct,
         symbol_config.levels.max_levels,
+        entry_tf=tf,
+        htf_timeframe=symbol_config.levels.htf_timeframe,
+        lookback=symbol_config.levels.lookback_window,
     )
     tol_pct_used = meta.get("tol_pct_used", symbol_config.levels.cluster_tol_pct)
     overrides = symbol_config.levels.overrides
     merged = apply_overrides(auto_levels, overrides.add, overrides.disable, tol_pct_used)
     final_levels = merged["final_levels"]
+    final_levels_detailed = build_levels_detailed(
+        final_levels,
+        clusters,
+        meta.get("last_close_used"),
+        tol_pct_used,
+    )
+    level_roles = level_roles_from_details(final_levels_detailed)
+    context.update(
+        {
+            "sr_algorithm": meta.get("algorithm"),
+            "sr_entry_tf": tf,
+            "sr_htf_timeframe": meta.get("htf_timeframe"),
+            "sr_lookback": meta.get("lookback"),
+            "active_support": meta.get("support"),
+            "active_resistance": meta.get("resistance"),
+        }
+    )
 
     fakeout_volume_series = None
     if not symbol_config.rules.fakeout_volume_filter:
         fakeout_volume_series = [True] * len(candles)
-    events = detect_level_events(candles, final_levels, slope_ok_series=fakeout_volume_series)
+    events = detect_level_events(candles, final_levels, slope_ok_series=fakeout_volume_series, level_roles=level_roles)
     setup_items = detect_setup_candles(candles, sma7, sma25, sma99, events, sl_buffer_pct=0.0015)
 
     signals = build_signals_from_state(

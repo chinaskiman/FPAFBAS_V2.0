@@ -3,9 +3,10 @@ import { createChart } from "lightweight-charts";
 
 const EMPTY_HEALTH = { status: "loading" };
 const ADMIN_TOKEN_SESSION_KEY = "fpafbas_admin_token";
+const REPLAY_ENTRY_TFS = ["15m", "1h"];
 
 const fetchJson = async (url, options = {}) => {
-  const res = await fetch(url, options);
+  const res = await fetch(url, { credentials: "same-origin", ...options });
   if (!res.ok) {
     throw new Error(`${url} failed with ${res.status}`);
   }
@@ -95,12 +96,11 @@ export default function DashboardPage({ view = "dashboard" }) {
   const [watchlistSaveStatus, setWatchlistSaveStatus] = useState("");
   const [indicators, setIndicators] = useState(null);
   const [indicatorError, setIndicatorError] = useState("");
-  const [pivotStats, setPivotStats] = useState(null);
-  const [pivotError, setPivotError] = useState("");
   const [symbols, setSymbols] = useState([]);
   const [selectedSymbol, setSelectedSymbol] = useState("");
   const [levels, setLevels] = useState(null);
   const [levelsError, setLevelsError] = useState("");
+  const [levelsEntryTf, setLevelsEntryTf] = useState("15m");
   const [pinnedInput, setPinnedInput] = useState("");
   const [disabledInput, setDisabledInput] = useState("");
   const [bias, setBias] = useState(null);
@@ -145,7 +145,7 @@ export default function DashboardPage({ view = "dashboard" }) {
   const [showSetupCandles, setShowSetupCandles] = useState(true);
   const [showOpenings, setShowOpenings] = useState(true);
   const [showHwcBadge, setShowHwcBadge] = useState(false);
-  const [showDiWidget, setShowDiWidget] = useState(false);
+  const [showDiWidget, setShowDiWidget] = useState(true);
   const [showRsiWidget, setShowRsiWidget] = useState(false);
   const [showVolumeWidget, setShowVolumeWidget] = useState(true);
   const [chartLegend, setChartLegend] = useState(null);
@@ -158,13 +158,14 @@ export default function DashboardPage({ view = "dashboard" }) {
   const [chartVolError, setChartVolError] = useState("");
   const [replayData, setReplayData] = useState(null);
   const [replaySummary, setReplaySummary] = useState(null);
+  const [replayRuns, setReplayRuns] = useState({});
   const [replayError, setReplayError] = useState("");
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayTf, setReplayTf] = useState("1h");
   const [replayStep, setReplayStep] = useState(1);
   const [replayWarmup, setReplayWarmup] = useState(300);
-  const [replayFromMs, setReplayFromMs] = useState("");
-  const [replayToMs, setReplayToMs] = useState("");
+  const [replayFromMs, setReplayFromMs] = useState(() => formatDateTimeLocal(Date.now() - 24 * 60 * 60 * 1000));
+  const [replayToMs, setReplayToMs] = useState(() => formatDateTimeLocal(Date.now()));
   const [replayIndex, setReplayIndex] = useState(0);
   const [replayDetails, setReplayDetails] = useState(null);
   const [replaySideFilter, setReplaySideFilter] = useState("all");
@@ -180,7 +181,6 @@ export default function DashboardPage({ view = "dashboard" }) {
   const watchlistTfOptions = ["15m", "1h", "4h", "1d"];
   const watchlistDefaultTfs = ["15m", "1h", "4h"];
   const watchlistRuleOptions = [
-    ["hwc_filter", "HWC"],
     ["di_peak_filter", "DI"],
     ["volume_spike_filter", "Vol"],
     ["fakeout_volume_filter", "Fake vol"],
@@ -201,17 +201,24 @@ export default function DashboardPage({ view = "dashboard" }) {
   }, [watchlistItems, watchlistFilter]);
   const chartContainerRef = useRef(null);
   const volumeContainerRef = useRef(null);
+  const indicatorContainerRef = useRef(null);
   const chartAbortRef = useRef(null);
   const markerDetailsRef = useRef(new Map());
   const chartTfRef = useRef(chartTf);
   const chartRefs = useRef({
     main: null,
     volume: null,
+    indicator: null,
     candleSeries: null,
-    smaSeries: null,
+    sma7Series: null,
+    sma21Series: null,
+    sma50Series: null,
     volumeSeries: null,
     volMa5Series: null,
     volMa10Series: null,
+    diPlusSeries: null,
+    diMinusSeries: null,
+    adxSeries: null,
     priceLines: [],
     zoneSeries: []
   });
@@ -245,7 +252,7 @@ export default function DashboardPage({ view = "dashboard" }) {
   }, [watchlistItems]);
 
   useEffect(() => {
-    if (!chartContainerRef.current || !volumeContainerRef.current) {
+    if (!chartContainerRef.current || !volumeContainerRef.current || !indicatorContainerRef.current) {
       return undefined;
     }
     const mainChart = createChart(chartContainerRef.current, {
@@ -262,7 +269,9 @@ export default function DashboardPage({ view = "dashboard" }) {
       wickUpColor: "#0f6b5c",
       wickDownColor: "#7a2f2f"
     });
-    const smaSeries = mainChart.addLineSeries({ color: "#1f1c17", lineWidth: 2 });
+    const sma7Series = mainChart.addLineSeries({ color: "#1f1c17", lineWidth: 2, title: "SMA 7" });
+    const sma21Series = mainChart.addLineSeries({ color: "#0f6b5c", lineWidth: 2, title: "SMA 21" });
+    const sma50Series = mainChart.addLineSeries({ color: "#b7791f", lineWidth: 2, title: "SMA 50" });
 
     const volumeChart = createChart(volumeContainerRef.current, {
       height: 140,
@@ -278,14 +287,31 @@ export default function DashboardPage({ view = "dashboard" }) {
     const volMa5Series = volumeChart.addLineSeries({ color: "#0f6b5c", lineWidth: 1 });
     const volMa10Series = volumeChart.addLineSeries({ color: "#7a6a45", lineWidth: 1 });
 
+    const indicatorChart = createChart(indicatorContainerRef.current, {
+      height: 150,
+      layout: { background: { color: "#ffffff" }, textColor: "#1f1c17" },
+      grid: { vertLines: { color: "#efe6d8" }, horzLines: { color: "#efe6d8" } },
+      rightPriceScale: { borderColor: "#e0d8c8" },
+      timeScale: { borderColor: "#e0d8c8" }
+    });
+    const diPlusSeries = indicatorChart.addLineSeries({ color: "#0f6b5c", lineWidth: 2, title: "DI+" });
+    const diMinusSeries = indicatorChart.addLineSeries({ color: "#7a2f2f", lineWidth: 2, title: "DI-" });
+    const adxSeries = indicatorChart.addLineSeries({ color: "#1f1c17", lineWidth: 2, title: "ADX" });
+
     chartRefs.current = {
       main: mainChart,
       volume: volumeChart,
+      indicator: indicatorChart,
       candleSeries,
-      smaSeries,
+      sma7Series,
+      sma21Series,
+      sma50Series,
       volumeSeries,
       volMa5Series,
       volMa10Series,
+      diPlusSeries,
+      diMinusSeries,
+      adxSeries,
       priceLines: [],
       zoneSeries: []
     };
@@ -334,11 +360,15 @@ export default function DashboardPage({ view = "dashboard" }) {
     const handleResize = () => {
       const mainWidth = chartContainerRef.current?.clientWidth ?? 0;
       const volumeWidth = volumeContainerRef.current?.clientWidth ?? 0;
+      const indicatorWidth = indicatorContainerRef.current?.clientWidth ?? 0;
       if (mainWidth) {
         mainChart.applyOptions({ width: mainWidth });
       }
       if (volumeWidth) {
         volumeChart.applyOptions({ width: volumeWidth });
+      }
+      if (indicatorWidth) {
+        indicatorChart.applyOptions({ width: indicatorWidth });
       }
     };
     handleResize();
@@ -350,6 +380,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       mainChart.unsubscribeClick(handleChartClick);
       mainChart.remove();
       volumeChart.remove();
+      indicatorChart.remove();
     };
   }, []);
 
@@ -415,15 +446,19 @@ export default function DashboardPage({ view = "dashboard" }) {
 
   useEffect(() => {
     const loadIndicators = async () => {
+      if (!selectedSymbol || !chartTf) {
+        return;
+      }
       try {
-        const data = await fetchJson("/api/indicators/BTCUSDT/1h?limit=200");
+        const data = await fetchJson(`/api/indicators/${selectedSymbol}/${chartTf}?limit=200`);
         setIndicators(data);
+        setIndicatorError("");
       } catch (err) {
         setIndicatorError(err instanceof Error ? err.message : "Unknown error");
       }
     };
     loadIndicators();
-  }, []);
+  }, [selectedSymbol, chartTf]);
 
   useEffect(() => {
     const loadQuality = async () => {
@@ -459,7 +494,7 @@ export default function DashboardPage({ view = "dashboard" }) {
         return;
       }
       try {
-        const data = await fetchJson(`/api/levels/${selectedSymbol}?debug=1`);
+        const data = await fetchJson(`/api/levels/${selectedSymbol}?debug=1&entry_tf=${levelsEntryTf}`);
         setLevels(data);
         setLevelsError("");
       } catch (err) {
@@ -467,7 +502,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       }
     };
     loadLevels();
-  }, [selectedSymbol]);
+  }, [selectedSymbol, levelsEntryTf]);
 
   useEffect(() => {
     const loadBias = async () => {
@@ -656,7 +691,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       setChartError("");
 
       const requests = await Promise.allSettled([
-        fetchJson(`/api/levels/${selectedSymbol}?debug=1`, { signal: controller.signal }),
+        fetchJson(`/api/levels/${selectedSymbol}?debug=1&entry_tf=${chartTf}`, { signal: controller.signal }),
         fetchJson(`/api/level_events/${selectedSymbol}/${chartTf}?limit=500`, { signal: controller.signal }),
         fetchJson(`/api/setup_candles/${selectedSymbol}/${chartTf}?limit=500`, { signal: controller.signal }),
         fetchJson(`/api/openings/${selectedSymbol}/${chartTf}?limit=500`, { signal: controller.signal })
@@ -690,6 +725,14 @@ export default function DashboardPage({ view = "dashboard" }) {
   }, [selectedSymbol, chartTf, replayData]);
 
   useEffect(() => {
+    setReplayRuns({});
+    setReplayData(null);
+    setReplaySummary(null);
+    setReplayIndex(0);
+    setReplayDetails(null);
+  }, [selectedSymbol]);
+
+  useEffect(() => {
     if (!chartAutoRefresh) {
       return undefined;
     }
@@ -708,14 +751,18 @@ export default function DashboardPage({ view = "dashboard" }) {
       return;
     }
     const refs = chartRefs.current;
-    if (!refs.candleSeries || !refs.smaSeries) {
+    if (!refs.candleSeries || !refs.sma7Series) {
       return;
     }
     const candles = isReplayMode ? buildReplayCandles(replayItemsLocal) : chartCandles;
     const candleSeries = toChartCandles(candles);
     refs.candleSeries.setData(candleSeries);
     const sma7 = showSma7 ? computeSmaSeries(candles, 7) : [];
-    refs.smaSeries.setData(sma7);
+    const sma21 = showSma7 ? computeSmaSeries(candles, 21) : [];
+    const sma50 = showSma7 ? computeSmaSeries(candles, 50) : [];
+    refs.sma7Series.setData(sma7);
+    refs.sma21Series?.setData(sma21);
+    refs.sma50Series?.setData(sma50);
 
     const volumeSeries = showVolumeWidget ? toVolumeSeries(candles) : [];
     const volMa5 = showVolumeWidget ? computeSmaSeries(candles, 5, "volume") : [];
@@ -723,6 +770,11 @@ export default function DashboardPage({ view = "dashboard" }) {
     refs.volumeSeries?.setData(volumeSeries);
     refs.volMa5Series?.setData(volMa5);
     refs.volMa10Series?.setData(volMa10);
+
+    const dmi = showDiWidget ? computeDmiAdxSeries(candles) : { diPlus: [], diMinus: [], adx: [] };
+    refs.diPlusSeries?.setData(dmi.diPlus);
+    refs.diMinusSeries?.setData(dmi.diMinus);
+    refs.adxSeries?.setData(dmi.adx);
 
     if (Array.isArray(refs.priceLines)) {
       refs.priceLines.forEach((line) => {
@@ -774,7 +826,7 @@ export default function DashboardPage({ view = "dashboard" }) {
           { time: timeRange.end, value: level.zone_high }
         ]);
         refs.zoneSeries.push(zoneSeries);
-        const label = `${role} ${Number(level.center).toFixed(2)}`;
+        const label = `${role === "support" ? "Support" : role === "resistance" ? "Resistance" : "Level"} ${Number(level.center).toFixed(2)}`;
         const line = refs.candleSeries.createPriceLine({
           price: level.center,
           color: role === "support" ? "#0f6b5c" : role === "resistance" ? "#7a2f2f" : "#7a6a45",
@@ -808,6 +860,7 @@ export default function DashboardPage({ view = "dashboard" }) {
     refs.candleSeries.setMarkers(markers);
     refs.main?.timeScale().fitContent();
     refs.volume?.timeScale().fitContent();
+    refs.indicator?.timeScale().fitContent();
   }, [
     chartCandles,
     chartLevels,
@@ -820,21 +873,12 @@ export default function DashboardPage({ view = "dashboard" }) {
     chartTf,
     showZones,
     showSma7,
+    showDiWidget,
     showLevelEvents,
     showSetupCandles,
     showOpenings,
     showVolumeWidget
   ]);
-
-  const loadPivots = async () => {
-    try {
-      const stats = await fetchPivotCounts();
-      setPivotStats(stats);
-      setPivotError("");
-    } catch (err) {
-      setPivotError(err instanceof Error ? err.message : "Unknown error");
-    }
-  };
 
   const handleAddPinned = () => {
     const value = Number(pinnedInput);
@@ -887,7 +931,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       setSelectedSymbol(updatedSymbols[0] ?? "");
     }
     if (selectedSymbol) {
-      const updatedLevels = await fetchJson(`/api/levels/${selectedSymbol}`);
+      const updatedLevels = await fetchJson(`/api/levels/${selectedSymbol}?entry_tf=${levelsEntryTf}`);
       setLevels(updatedLevels);
     }
     setWatchlistSaveStatus("Saved");
@@ -1175,8 +1219,8 @@ export default function DashboardPage({ view = "dashboard" }) {
 
   const handleReplayQuickRange = (hours) => {
     const now = Date.now();
-    setReplayFromMs(String(now - hours * 60 * 60 * 1000));
-    setReplayToMs(String(now));
+    setReplayFromMs(formatDateTimeLocal(now - hours * 60 * 60 * 1000));
+    setReplayToMs(formatDateTimeLocal(now));
   };
 
   const handleReplayRun = async () => {
@@ -1186,10 +1230,13 @@ export default function DashboardPage({ view = "dashboard" }) {
     setReplayError("");
     setReplayLoading(true);
     try {
-      const fromMs = Number(replayFromMs);
-      const toMs = Number(replayToMs);
+      const fromMs = parseDateTimeLocalMs(replayFromMs);
+      const toMs = parseDateTimeLocalMs(replayToMs);
       if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
-        throw new Error("from_ms and to_ms must be numbers.");
+        throw new Error("Select valid From and To date/time values.");
+      }
+      if (fromMs >= toMs) {
+        throw new Error("From must be before To.");
       }
       const params = new URLSearchParams({
         from_ms: String(fromMs),
@@ -1198,15 +1245,40 @@ export default function DashboardPage({ view = "dashboard" }) {
         warmup: String(replayWarmup),
         debug: "1"
       });
-      const [summary, data] = await Promise.all([
-        fetchJson(`/api/replay_summary/${selectedSymbol}/${replayTf}?${params}`),
-        fetchJson(`/api/replay/${selectedSymbol}/${replayTf}?${params}`)
-      ]);
-      setReplaySummary(summary);
-      setReplayData(data);
-      const items = Array.isArray(data.items) ? data.items : [];
+      const runResults = await Promise.allSettled(
+        REPLAY_ENTRY_TFS.map(async (tf) => {
+          const [summary, data] = await Promise.all([
+            fetchJson(`/api/replay_summary/${selectedSymbol}/${tf}?${params}`),
+            fetchJson(`/api/replay/${selectedSymbol}/${tf}?${params}`)
+          ]);
+          return [tf, { summary, data }];
+        })
+      );
+      const nextRuns = {};
+      const errors = [];
+      runResults.forEach((result, idx) => {
+        const tf = REPLAY_ENTRY_TFS[idx];
+        if (result.status === "fulfilled") {
+          const [resolvedTf, payload] = result.value;
+          nextRuns[resolvedTf] = payload;
+        } else {
+          errors.push(`${tf}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
+        }
+      });
+      if (Object.keys(nextRuns).length === 0) {
+        throw new Error(errors.join(" | ") || "Replay failed for all entry timeframes.");
+      }
+      setReplayRuns(nextRuns);
+      const activeRun = nextRuns[replayTf] ?? nextRuns[REPLAY_ENTRY_TFS[0]];
+      setChartTf(activeRun.data?.tf ?? replayTf);
+      setReplaySummary(activeRun.summary);
+      setReplayData(activeRun.data);
+      const items = Array.isArray(activeRun.data?.items) ? activeRun.data.items : [];
       setReplayIndex(items.length > 0 ? items.length - 1 : 0);
       setReplayDetails(null);
+      if (errors.length > 0) {
+        setReplayError(`Partial replay loaded. ${errors.join(" | ")}`);
+      }
     } catch (err) {
       setReplayError(err instanceof Error ? err.message : "Replay failed.");
     } finally {
@@ -1216,7 +1288,25 @@ export default function DashboardPage({ view = "dashboard" }) {
 
   const replayItems = Array.isArray(replayData?.items) ? replayData.items : [];
   const replayItem = replayItems[replayIndex];
-  const backendReplayTrades = replaySummary?.performance?.trade_rows;
+  const replayRunEntries = useMemo(() => Object.entries(replayRuns || {}), [replayRuns]);
+  const replayTfSummaries = useMemo(
+    () => REPLAY_ENTRY_TFS.map((tf) => ({ tf, summary: replayRuns?.[tf]?.summary ?? null })),
+    [replayRuns]
+  );
+  const backendReplayTrades = useMemo(() => {
+    if (replayRunEntries.length === 0) {
+      return replaySummary?.performance?.trade_rows;
+    }
+    const rows = [];
+    replayRunEntries.forEach(([tf, run]) => {
+      const tradeRows = run?.summary?.performance?.trade_rows;
+      if (!Array.isArray(tradeRows)) {
+        return;
+      }
+      tradeRows.forEach((trade) => rows.push({ ...trade, tf: trade.tf ?? tf }));
+    });
+    return rows;
+  }, [replayRunEntries, replaySummary]);
   const replayTradeOutcomes = useMemo(
     () =>
       Array.isArray(backendReplayTrades)
@@ -1268,6 +1358,35 @@ export default function DashboardPage({ view = "dashboard" }) {
     return rows;
   }, [replayTradeOutcomes, replaySideFilter, replayOutcomeFilter, replayBiasAlignmentFilter, replaySortBy]);
   const replayTradeStats = useMemo(() => summarizeReplayOutcomes(replayTradeRows), [replayTradeRows]);
+  const replayTradeStatsByTf = useMemo(
+    () =>
+      REPLAY_ENTRY_TFS.map((tf) => ({
+        tf,
+        stats: summarizeReplayOutcomes(replayTradeOutcomes.filter((trade) => trade.tf === tf)),
+      })),
+    [replayTradeOutcomes]
+  );
+  const replayWindowLabel = useMemo(() => {
+    const fromMs = parseDateTimeLocalMs(replayFromMs);
+    const toMs = parseDateTimeLocalMs(replayToMs);
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || fromMs >= toMs) {
+      return "-";
+    }
+    return `${formatTimestamp(fromMs)} -> ${formatTimestamp(toMs)} (${formatDurationMs(toMs - fromMs)})`;
+  }, [replayFromMs, replayToMs]);
+
+  useEffect(() => {
+    const run = replayRuns?.[replayTf];
+    if (!run) {
+      return;
+    }
+    setReplaySummary(run.summary);
+    setReplayData(run.data);
+    setChartTf(run.data?.tf ?? replayTf);
+    const items = Array.isArray(run.data?.items) ? run.data.items : [];
+    setReplayIndex(items.length > 0 ? items.length - 1 : 0);
+    setReplayDetails(null);
+  }, [replayTf, replayRuns]);
 
   const handleReplaySignalClick = (signal) => {
     setReplayDetails(signal);
@@ -1370,13 +1489,21 @@ export default function DashboardPage({ view = "dashboard" }) {
   const showLevels = view === "levels";
   const showSettings = view === "settings";
   const showOps = view === "ops";
+  const pageTitle =
+    {
+      dashboard: "Signal Workspace",
+      replay: "Replay Lab",
+      levels: "Active S/R",
+      settings: "Settings",
+      ops: "Operations"
+    }[view] ?? "Signal Workspace";
 
   return (
     <div className="app">
       <header className="app-header">
         <div>
           <p className="eyebrow">Binance USDT Perp Scanner</p>
-          <h1>Alert Dashboard</h1>
+          <h1>{pageTitle}</h1>
         </div>
         <div className="status-chip">
           <span>Service</span>
@@ -1627,11 +1754,11 @@ export default function DashboardPage({ view = "dashboard" }) {
         <div className="toggle-grid">
           <label className="checkbox">
             <input type="checkbox" checked={showZones} onChange={(event) => setShowZones(event.target.checked)} />
-            <span>S/R Zones</span>
+            <span>Active S/R</span>
           </label>
           <label className="checkbox">
             <input type="checkbox" checked={showSma7} onChange={(event) => setShowSma7(event.target.checked)} />
-            <span>SMA7</span>
+            <span>SMA 7/21/50</span>
           </label>
           <label className="checkbox">
             <input
@@ -1655,11 +1782,11 @@ export default function DashboardPage({ view = "dashboard" }) {
           </label>
           <label className="checkbox">
             <input type="checkbox" checked={showHwcBadge} onChange={(event) => setShowHwcBadge(event.target.checked)} />
-            <span>HWC Badge</span>
+            <span>Bias Context</span>
           </label>
           <label className="checkbox">
             <input type="checkbox" checked={showDiWidget} onChange={(event) => setShowDiWidget(event.target.checked)} />
-            <span>DI/ADX Widget</span>
+            <span>DI / ADX</span>
           </label>
           <label className="checkbox">
             <input type="checkbox" checked={showRsiWidget} onChange={(event) => setShowRsiWidget(event.target.checked)} />
@@ -1695,11 +1822,11 @@ export default function DashboardPage({ view = "dashboard" }) {
           <div className="di-grid">
             {showHwcBadge ? (
               <div>
-                <span>HWC Bias</span>
+                <span>Bias Context</span>
                 <strong className={`bias-${bias?.hwc_bias ?? "neutral"}`}>{bias?.hwc_bias ?? "-"}</strong>
                 <small>
                   Weekly: {bias?.weekly?.bias ?? "-"} / Daily: {bias?.daily?.bias ?? "-"} / 4H:{" "}
-                  {bias?.four_hour?.bias ?? "-"} / MWC: {bias?.mwc_bias ?? "-"}
+                  {bias?.four_hour?.bias ?? "-"} / MWC: {bias?.mwc_bias ?? "-"} / not a filter
                 </small>
               </div>
             ) : null}
@@ -1736,6 +1863,10 @@ export default function DashboardPage({ view = "dashboard" }) {
         <div className="chart-stack">
           <div className="chart-canvas" ref={chartContainerRef} />
           <div className="chart-canvas chart-canvas-small" ref={volumeContainerRef} />
+          <div
+            className={`chart-canvas chart-canvas-indicator ${showDiWidget ? "" : "chart-canvas-hidden"}`}
+            ref={indicatorContainerRef}
+          />
         </div>
 
         {isReplayActive ? (
@@ -1842,13 +1973,10 @@ export default function DashboardPage({ view = "dashboard" }) {
             </select>
           </label>
           <label className="field">
-            <span>TF</span>
+            <span>Chart TF</span>
             <select value={replayTf} onChange={(event) => setReplayTf(event.target.value)}>
               <option value="15m">15m</option>
               <option value="1h">1h</option>
-              <option value="4h">4h</option>
-              <option value="1d">1d</option>
-              <option value="1w">1w</option>
             </select>
           </label>
           <label className="field">
@@ -1870,12 +1998,20 @@ export default function DashboardPage({ view = "dashboard" }) {
         </div>
         <div className="di-controls">
           <label className="field">
-            <span>From (ms)</span>
-            <input type="number" value={replayFromMs} onChange={(event) => setReplayFromMs(event.target.value)} />
+            <span>From</span>
+            <input
+              type="datetime-local"
+              value={replayFromMs}
+              onChange={(event) => setReplayFromMs(event.target.value)}
+            />
           </label>
           <label className="field">
-            <span>To (ms)</span>
-            <input type="number" value={replayToMs} onChange={(event) => setReplayToMs(event.target.value)} />
+            <span>To</span>
+            <input
+              type="datetime-local"
+              value={replayToMs}
+              onChange={(event) => setReplayToMs(event.target.value)}
+            />
           </label>
           <div className="inline-form">
             <button className="btn btn-small" type="button" onClick={() => handleReplayQuickRange(24)}>
@@ -1892,6 +2028,54 @@ export default function DashboardPage({ view = "dashboard" }) {
             {replayLoading ? "Running..." : "Run Replay"}
           </button>
         </div>
+
+        <p className="muted">
+          Runs both entry timeframes for the selected window: 15m uses 4H S/R, 1h uses Daily S/R. Chart controls show
+          the selected timeframe only; trade metrics below include both.
+        </p>
+        <p className="muted">Selected window: {replayWindowLabel}</p>
+
+        {replayTfSummaries.some((item) => item.summary) ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Entry TF</th>
+                  <th>Window</th>
+                  <th>Steps</th>
+                  <th>Signals</th>
+                  <th>Trades</th>
+                  <th>W/L/O</th>
+                  <th>Win Rate</th>
+                  <th>Total R</th>
+                  <th>Avg Max RR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {replayTfSummaries.map(({ tf, summary }) => {
+                  const perf = summary?.performance;
+                  return (
+                    <tr key={`replay-tf-summary-${tf}`}>
+                      <td>{tf}</td>
+                      <td>
+                        {summary ? `${formatTimestamp(summary.from_ms)} -> ${formatTimestamp(summary.to_ms)}` : "-"}
+                      </td>
+                      <td>{summary?.total_steps ?? "-"}</td>
+                      <td>{summary?.signals_total ?? "-"}</td>
+                      <td>{perf?.trades ?? "-"}</td>
+                      <td>
+                        {perf ? `${perf.wins ?? 0} / ${perf.losses ?? 0} / ${perf.open ?? 0}` : "-"}
+                      </td>
+                      <td>{perf ? formatPercentFraction(perf.win_rate) : "-"}</td>
+                      <td>{perf ? formatNumber(perf.realized_r_total) : "-"}</td>
+                      <td>{perf ? formatNumber(perf.max_rr_avg) : "-"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
 
         {replaySummary ? (
           <div>
@@ -2101,6 +2285,14 @@ export default function DashboardPage({ view = "dashboard" }) {
                 </strong>
               </div>
               <div>
+                <span>Filtered Win Rate</span>
+                <strong>{formatPercentFraction(replayTradeStats.win_rate)}</strong>
+              </div>
+              <div>
+                <span>Filtered Total R</span>
+                <strong>{formatNumber(replayTradeStats.realized_r_total)}</strong>
+              </div>
+              <div>
                 <span>Max Drawdown (R)</span>
                 <strong>{formatNumber(replayTradeStats.max_drawdown_r)}</strong>
               </div>
@@ -2126,6 +2318,38 @@ export default function DashboardPage({ view = "dashboard" }) {
               <table>
                 <thead>
                   <tr>
+                    <th>Entry TF</th>
+                    <th>Trades</th>
+                    <th>Wins / Losses / Open</th>
+                    <th>Win Rate</th>
+                    <th>Total R</th>
+                    <th>Max Drawdown R</th>
+                    <th>Avg Win RR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {replayTradeStatsByTf.map(({ tf, stats }) => (
+                    <tr key={`trade-stats-${tf}`}>
+                      <td>{tf}</td>
+                      <td>{stats.total}</td>
+                      <td>
+                        {stats.wins} / {stats.losses} / {stats.open}
+                      </td>
+                      <td>{formatPercentFraction(stats.win_rate)}</td>
+                      <td>{formatNumber(stats.realized_r_total)}</td>
+                      <td>{formatNumber(stats.max_drawdown_r)}</td>
+                      <td>{formatNumber(stats.avg_win_rr)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>TF</th>
                     <th>Signal Time</th>
                     <th>Type</th>
                     <th>Direction</th>
@@ -2146,13 +2370,14 @@ export default function DashboardPage({ view = "dashboard" }) {
                 <tbody>
                   {replayTradeRows.length === 0 ? (
                     <tr>
-                      <td colSpan={15} className="muted">
+                      <td colSpan={16} className="muted">
                         No replay trades match filters.
                       </td>
                     </tr>
                   ) : (
                     replayTradeRows.map((trade) => (
                       <tr key={trade.id}>
+                        <td>{trade.tf}</td>
                         <td>{formatTimestamp(trade.signal_time)}</td>
                         <td>{trade.type}</td>
                         <td>{trade.direction}</td>
@@ -2437,7 +2662,7 @@ export default function DashboardPage({ view = "dashboard" }) {
                       <span>
                         {alertDetails.symbol} {alertDetails.tf} {alertDetails.type} {alertDetails.direction}
                       </span>
-                      <span>Level: {alertDetails.level ?? "-"}</span>
+                      <span>S/R Level: {alertDetails.level ?? "-"}</span>
                     </div>
                     <div className="drawer-meta">
                       <span>Entry: {alertDetails.entry ?? "-"}</span>
@@ -2857,7 +3082,7 @@ export default function DashboardPage({ view = "dashboard" }) {
 
       {showDashboard ? (
       <section className="card">
-        <h2>Indicator Debug (BTCUSDT 1h)</h2>
+        <h2>Indicator Snapshot</h2>
         {indicatorError ? <div className="error">{indicatorError}</div> : null}
         {indicators ? (
           <div className="indicator-grid">
@@ -2892,33 +3117,9 @@ export default function DashboardPage({ view = "dashboard" }) {
       </section>
       ) : null}
 
-      {showDashboard ? (
-      <section className="card">
-        <h2>Pivot Debug (BTCUSDT 1h)</h2>
-        {pivotError ? <div className="error">{pivotError}</div> : null}
-        <button className="btn" type="button" onClick={loadPivots}>
-          Load Pivot Counts
-        </button>
-        {pivotStats ? (
-          <div className="pivot-stats">
-            <div>
-              <span>Pivot Highs</span>
-              <strong>{pivotStats.highs}</strong>
-            </div>
-            <div>
-              <span>Pivot Lows</span>
-              <strong>{pivotStats.lows}</strong>
-            </div>
-          </div>
-        ) : (
-          <p className="muted">Click to load pivot counts.</p>
-        )}
-      </section>
-      ) : null}
-
       {showDashboard || showLevels ? (
       <section className="card">
-        <h2>Levels</h2>
+        <h2>Active S/R Levels</h2>
         {levelsError ? <div className="error">{levelsError}</div> : null}
         <label className="field">
           <span>Symbol</span>
@@ -2930,42 +3131,25 @@ export default function DashboardPage({ view = "dashboard" }) {
             ))}
           </select>
         </label>
+        <label className="field">
+          <span>Entry TF</span>
+          <select value={levelsEntryTf} onChange={(event) => setLevelsEntryTf(event.target.value)}>
+            <option value="15m">15m uses 4H S/R</option>
+            <option value="1h">1h uses Daily S/R</option>
+          </select>
+        </label>
         {levels ? (
           <div className="levels-grid">
             <div>
-              <h3>Auto Levels</h3>
+              <h3>Detected Pattern Levels</h3>
               <p className="muted">
-                Last close: {formatNumber(levels.last_close_used)} | below: {levels.below_count ?? "-"} | above:{" "}
-                {levels.above_count ?? "-"} | tol: {formatNumber(levels.tol_pct_used)}
+                HTF: {levels.htf_timeframe ?? "-"} | lookback: {levels.lookback_window ?? "-"} | last HTF close:{" "}
+                {formatNumber(levels.last_close_used)}
               </p>
-              <LevelList items={levels.auto_levels} emptyLabel="No auto levels yet." />
-              {Array.isArray(levels.clusters_debug) && levels.clusters_debug.length > 0 ? (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Center</th>
-                        <th>Touches</th>
-                        <th>Strength</th>
-                        <th>Last Idx</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {levels.clusters_debug.slice(0, 6).map((cluster) => (
-                        <tr key={`cluster-${cluster.center}`}>
-                          <td>{formatNumber(cluster.center)}</td>
-                          <td>{cluster.touches ?? "-"}</td>
-                          <td>{formatNumber(cluster.strength)}</td>
-                          <td>{cluster.last_touch_index ?? "-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
+              <DetailedLevelList items={levels.final_levels_detailed} emptyLabel="No active S/R levels yet." />
             </div>
             <div>
-              <h3>Final Levels</h3>
+              <h3>Effective Prices</h3>
               <LevelList items={levels.final_levels} emptyLabel="No final levels yet." />
             </div>
             <div>
@@ -3010,12 +3194,13 @@ export default function DashboardPage({ view = "dashboard" }) {
 
       {showDashboard ? (
       <section className="card">
-        <h2>Bias</h2>
+        <h2>Bias Context</h2>
+        <p className="muted">HWC and MWC are shown for analysis only. They do not filter entries.</p>
         {biasError ? <div className="error">{biasError}</div> : null}
         {bias ? (
           <div className="bias-grid">
             <div>
-              <span>HWC Bias</span>
+              <span>HWC Context</span>
               <strong className={`bias-${bias.hwc_bias}`}>{bias.hwc_bias}</strong>
             </div>
             <div>
@@ -3363,7 +3548,7 @@ export default function DashboardPage({ view = "dashboard" }) {
           <div>
             <div className="bias-grid">
               <div>
-                <span>HWC Bias</span>
+                <span>HWC Context</span>
                 <strong className={`bias-${openings.hwc_bias}`}>{openings.hwc_bias}</strong>
               </div>
               <div>
@@ -3474,6 +3659,23 @@ function formatTimestamp(value) {
     return "-";
   }
   return new Date(value).toLocaleString();
+}
+
+function formatDateTimeLocal(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const pad = (num) => String(num).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function parseDateTimeLocalMs(value) {
+  if (!value) {
+    return NaN;
+  }
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : NaN;
 }
 
 function formatDurationMs(value) {
@@ -3816,6 +4018,7 @@ function summarizeReplayOutcomes(trades) {
   let losses = 0;
   let open = 0;
   let winsRrSum = 0;
+  let realizedRTotal = 0;
 
   rows.forEach((trade) => {
     const side = trade.direction === "short" ? "short" : "long";
@@ -3824,12 +4027,15 @@ function summarizeReplayOutcomes(trades) {
       wins += 1;
       bySide[side].wins += 1;
       winsRrSum += Number(trade.max_rr ?? 0);
+      realizedRTotal += Number(trade.realized_r ?? 2);
     } else if (trade.outcome === "loss") {
       losses += 1;
       bySide[side].losses += 1;
+      realizedRTotal += Number(trade.realized_r ?? -1);
     } else {
       open += 1;
       bySide[side].open += 1;
+      realizedRTotal += Number(trade.realized_r ?? 0);
     }
   });
 
@@ -3858,6 +4064,8 @@ function summarizeReplayOutcomes(trades) {
     wins,
     losses,
     open,
+    win_rate: wins + losses > 0 ? wins / (wins + losses) : null,
+    realized_r_total: realizedRTotal,
     avg_win_rr: wins > 0 ? winsRrSum / wins : 0,
     max_losing_streak: maxLosingStreak,
     max_drawdown_r: maxDrawdownR,
@@ -3890,6 +4098,7 @@ function formatTelegramText(alert) {
   const direction = String(alert.direction || payload.direction || "-").toLowerCase();
   const directionTag = direction === "long" || direction === "short" ? direction.toUpperCase() : "-";
   const level = alert.level ?? payload.level;
+  const levelRole = String(payload.level_role ?? payload.level_event?.role ?? "").toLowerCase();
   const entry = toFiniteNumber(alert.entry ?? payload.entry);
   const sl = toFiniteNumber(alert.sl ?? payload.sl);
   const slReason = String(alert.sl_reason ?? payload.sl_reason ?? "-");
@@ -3900,12 +4109,16 @@ function formatTelegramText(alert) {
   const hwcBias = String(context.hwc_bias ?? alert.hwc_bias ?? payload.hwc_bias ?? "-");
   const mwcBias = String(context.mwc_bias ?? alert.mwc_bias ?? payload.mwc_bias ?? "-");
 
-  const volOk = context.vol_ma5_slope_ok;
+  const volOk = context.volume_spike_ok ?? context.vol_ma5_slope_ok;
   const pullbackVol = context.pullback_vol_decline;
   const diOk =
     direction === "long" ? context.not_at_peak_long : direction === "short" ? context.not_at_peak_short : null;
   const rsiDistance = toFiniteNumber(context.rsi_distance);
   const atrStopDistance = toFiniteNumber(context.atr_stop_distance);
+  const srHtf = context.sr_htf_timeframe;
+  const srLookback = context.sr_lookback;
+  const activeSupport = context.active_support;
+  const activeResistance = context.active_resistance;
 
   const risk = entry !== null && sl !== null ? Math.abs(entry - sl) : null;
   const riskPct = risk !== null && entry !== null && entry !== 0 ? risk / Math.abs(entry) : null;
@@ -3922,7 +4135,17 @@ function formatTelegramText(alert) {
   parts.push(`${type} ${directionTag} | ${symbol} ${tf}`);
   parts.push(`Time: ${formatTelegramTime(time)}`);
   if (level !== undefined && level !== null) {
-    parts.push(`Level: ${formatNumber(level)}`);
+    parts.push(`${formatLevelLabel(levelRole, direction)}: ${formatNumber(level)}`);
+  }
+  if (srHtf) {
+    const srParts = [`HTF: ${srHtf}`, `lookback: ${srLookback ?? "-"}`];
+    if (activeSupport) {
+      srParts.push(`support: ${formatNumber(activeSupport.center)}`);
+    }
+    if (activeResistance) {
+      srParts.push(`resistance: ${formatNumber(activeResistance.center)}`);
+    }
+    parts.push(`S/R: ${srParts.join(" | ")}`);
   }
   parts.push(`Entry: ${formatNumber(entry)} | SL: ${formatNumber(sl)} | SL reason: ${slReason}`);
   if (risk !== null) {
@@ -3930,7 +4153,9 @@ function formatTelegramText(alert) {
   } else {
     parts.push("Risk (1R): - | TP@2R: -");
   }
-  parts.push(`Bias: W ${weeklyBias} | D ${dailyBias} | 4H ${fourHourBias} | HWC ${hwcBias} | MWC ${mwcBias}`);
+  parts.push(
+    `Bias context (not a filter): W ${weeklyBias} | D ${dailyBias} | 4H ${fourHourBias} | HWC ${hwcBias} | MWC ${mwcBias}`
+  );
   parts.push(
     `Checks: VOL_OK=${formatTelegramBool(volOk)} | DI_OK=${formatTelegramBool(diOk)} | PULLBACK_VOL=${formatTelegramBool(pullbackVol)}`
   );
@@ -3945,6 +4170,16 @@ function formatTelegramText(alert) {
     parts.push(`Indicators: ${indicators.join(" | ")}`);
   }
   return parts.join("\n");
+}
+
+function formatLevelLabel(role, direction) {
+  if (role === "resistance" || direction === "long") {
+    return "Resistance";
+  }
+  if (role === "support" || direction === "short") {
+    return "Support";
+  }
+  return "Level";
 }
 
 function formatTelegramBool(value) {
@@ -4308,6 +4543,75 @@ function computeSmaSeries(candles, period, field = "close") {
   return result;
 }
 
+function computeDmiAdxSeries(candles, period = 14) {
+  if (!Array.isArray(candles) || candles.length <= period) {
+    return { diPlus: [], diMinus: [], adx: [] };
+  }
+
+  let smoothedTr = 0;
+  let smoothedPlusDm = 0;
+  let smoothedMinusDm = 0;
+  let adxValue = null;
+  const dxSeed = [];
+  const diPlus = [];
+  const diMinus = [];
+  const adx = [];
+
+  for (let idx = 1; idx < candles.length; idx += 1) {
+    const prev = candles[idx - 1];
+    const curr = candles[idx];
+    const high = Number(curr.high);
+    const low = Number(curr.low);
+    const prevHigh = Number(prev.high);
+    const prevLow = Number(prev.low);
+    const prevClose = Number(prev.close);
+    if (![high, low, prevHigh, prevLow, prevClose].every(Number.isFinite)) {
+      continue;
+    }
+
+    const upMove = high - prevHigh;
+    const downMove = prevLow - low;
+    const plusDm = upMove > downMove && upMove > 0 ? upMove : 0;
+    const minusDm = downMove > upMove && downMove > 0 ? downMove : 0;
+    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+
+    if (idx <= period) {
+      smoothedTr += tr;
+      smoothedPlusDm += plusDm;
+      smoothedMinusDm += minusDm;
+    } else {
+      smoothedTr = smoothedTr - smoothedTr / period + tr;
+      smoothedPlusDm = smoothedPlusDm - smoothedPlusDm / period + plusDm;
+      smoothedMinusDm = smoothedMinusDm - smoothedMinusDm / period + minusDm;
+    }
+
+    if (idx < period || smoothedTr === 0) {
+      continue;
+    }
+
+    const time = Math.floor(curr.time / 1000);
+    const plusDi = (smoothedPlusDm / smoothedTr) * 100;
+    const minusDi = (smoothedMinusDm / smoothedTr) * 100;
+    const denom = plusDi + minusDi;
+    const dx = denom > 0 ? (Math.abs(plusDi - minusDi) / denom) * 100 : 0;
+    diPlus.push({ time, value: plusDi });
+    diMinus.push({ time, value: minusDi });
+
+    if (adxValue === null) {
+      dxSeed.push(dx);
+      if (dxSeed.length === period) {
+        adxValue = dxSeed.reduce((acc, value) => acc + value, 0) / period;
+        adx.push({ time, value: adxValue });
+      }
+    } else {
+      adxValue = ((adxValue * (period - 1)) + dx) / period;
+      adx.push({ time, value: adxValue });
+    }
+  }
+
+  return { diPlus, diMinus, adx };
+}
+
 function buildLegendFromCandle(candle, timeOverride) {
   if (!candle) {
     return null;
@@ -4354,7 +4658,13 @@ function buildReplayCandles(items) {
 }
 
 function buildReplayLevels(item) {
-  if (!item || !Array.isArray(item.levels)) {
+  if (!item) {
+    return [];
+  }
+  if (Array.isArray(item.levels_detailed) && item.levels_detailed.length > 0) {
+    return item.levels_detailed;
+  }
+  if (!Array.isArray(item.levels)) {
     return [];
   }
   const tol = Number(item.tol_pct_used ?? 0);
@@ -4525,13 +4835,6 @@ function buildReplayMarkers(signals) {
   return mapped.sort((a, b) => a.time - b.time);
 }
 
-async function fetchPivotCounts() {
-  const data = await fetchJson("/api/debug/pivots/BTCUSDT/1h?limit=200");
-  const highs = Array.isArray(data.pivot_high) ? data.pivot_high.filter(Boolean).length : 0;
-  const lows = Array.isArray(data.pivot_low) ? data.pivot_low.filter(Boolean).length : 0;
-  return { highs, lows };
-}
-
 function LevelList({ items, emptyLabel }) {
   if (!Array.isArray(items) || items.length === 0) {
     return <p className="muted">{emptyLabel}</p>;
@@ -4540,6 +4843,27 @@ function LevelList({ items, emptyLabel }) {
     <ul className="level-list">
       {items.map((item) => (
         <li key={item}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
+function DetailedLevelList({ items, emptyLabel }) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return <p className="muted">{emptyLabel}</p>;
+  }
+  return (
+    <ul className="level-list">
+      {items.map((item) => (
+        <li key={`${item.role}-${item.center}`}>
+          <span>
+            {item.role === "support" ? "Support" : item.role === "resistance" ? "Resistance" : "Level"}{" "}
+            {formatNumber(item.center)}
+          </span>
+          <small>
+            {item.pattern ? item.pattern.replace("_", "->") : "manual"} | open {formatNumber(item.trigger_open)}
+          </small>
+        </li>
       ))}
     </ul>
   );
@@ -4600,7 +4924,16 @@ function buildWatchlistSymbolEntry(template, symbol, entryTfs) {
   const rules = normalizeWatchlistRules(template?.rules);
   const levels = template?.levels
     ? structuredClone(template.levels)
-    : { auto: true, max_levels: 12, cluster_tol_pct: 0.003, overrides: { add: [], disable: [] } };
+    : {
+        auto: true,
+        max_levels: 12,
+        cluster_tol_pct: 0.003,
+        htf_timeframe: "auto",
+        lookback_window: 14,
+        overrides: { add: [], disable: [] }
+      };
+  levels.htf_timeframe = levels.htf_timeframe ?? "auto";
+  levels.lookback_window = levels.lookback_window ?? 14;
   levels.overrides = { add: [], disable: [] };
   return {
     symbol,
@@ -4614,7 +4947,6 @@ function buildWatchlistSymbolEntry(template, symbol, entryTfs) {
 
 function normalizeWatchlistRules(rules) {
   return {
-    hwc_filter: rules?.hwc_filter ?? true,
     di_peak_filter: rules?.di_peak_filter ?? true,
     volume_spike_filter: rules?.volume_spike_filter ?? true,
     fakeout_volume_filter: rules?.fakeout_volume_filter ?? true,

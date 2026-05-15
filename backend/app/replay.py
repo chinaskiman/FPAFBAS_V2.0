@@ -9,7 +9,7 @@ from .di_peak import DI_PEAK_WINDOW_DEFAULT, compute_di_peak_flags
 from .hwc import compute_hwc_bias, compute_mwc_bias
 from .indicators import atr, dmi_adx, rsi, sma
 from .level_events import detect_level_events
-from .levels import HTF_TFS, apply_overrides, compute_levels
+from .levels import HTF_TFS, apply_overrides, build_levels_detailed, compute_levels, level_roles_from_details
 from .quality_controls import score_signal
 from .rsi_filters import atr_multiplier_from_rsi, rsi_distance_from_50
 from .signal_builder import build_signals_from_state
@@ -78,15 +78,25 @@ def replay_run(
             end = bisect.bisect_right(htf_times[htf], last_time)
             candles_by_tf[htf] = series[:end]
 
-        auto_levels, _selected, _clusters, meta = compute_levels(
+        auto_levels, _selected, clusters, meta = compute_levels(
             candles_by_tf,
             symbol_config.levels.cluster_tol_pct,
             symbol_config.levels.max_levels,
+            entry_tf=tf,
+            htf_timeframe=symbol_config.levels.htf_timeframe,
+            lookback=symbol_config.levels.lookback_window,
         )
         tol_pct_used = meta.get("tol_pct_used", symbol_config.levels.cluster_tol_pct)
         overrides = symbol_config.levels.overrides
         merged = apply_overrides(auto_levels, overrides.add, overrides.disable, tol_pct_used)
         final_levels = merged["final_levels"]
+        final_levels_detailed = build_levels_detailed(
+            final_levels,
+            clusters,
+            meta.get("last_close_used"),
+            tol_pct_used,
+        )
+        level_roles = level_roles_from_details(final_levels_detailed)
 
         closes = [candle.close for candle in window]
         highs = [candle.high for candle in window]
@@ -149,12 +159,23 @@ def replay_run(
             "mwc": mwc,
             "rules": rules,
             "setups": setups,
+            "sr_algorithm": meta.get("algorithm"),
+            "sr_entry_tf": tf,
+            "sr_htf_timeframe": meta.get("htf_timeframe"),
+            "sr_lookback": meta.get("lookback"),
+            "active_support": meta.get("support"),
+            "active_resistance": meta.get("resistance"),
         }
 
         fakeout_volume_series = None
         if not symbol_config.rules.fakeout_volume_filter:
             fakeout_volume_series = [True] * len(window)
-        events = detect_level_events(window, final_levels, slope_ok_series=fakeout_volume_series)
+        events = detect_level_events(
+            window,
+            final_levels,
+            slope_ok_series=fakeout_volume_series,
+            level_roles=level_roles,
+        )
         setup_items = detect_setup_candles(window, sma7, sma25, sma99, events, sl_buffer_pct=0.0015)
 
         signals = build_signals_from_state(
@@ -176,6 +197,7 @@ def replay_run(
                 "volume": last.volume,
             },
             "levels": final_levels,
+            "levels_detailed": final_levels_detailed,
             "tol_pct_used": tol_pct_used,
             "level_events": events,
             "setup_candles": setup_items,

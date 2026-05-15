@@ -32,8 +32,6 @@ def build_signals_from_state(
             direction = "short"
         else:
             continue
-        if rules.get("hwc_filter", True) and not _direction_allowed_by_hwc(direction, context):
-            continue
         if rules.get("volume_spike_filter", True) and not context.get("volume_spike_ok"):
             continue
         di_ok = context.get("not_at_peak_long") if direction == "long" else context.get("not_at_peak_short")
@@ -50,6 +48,7 @@ def build_signals_from_state(
                 {
                     "type": "break",
                     "level": event.get("level"),
+                    "level_role": event.get("role"),
                     "direction": direction,
                     "time": last_break["time"],
                     "entry": entry,
@@ -61,6 +60,7 @@ def build_signals_from_state(
                     "break_index": break_index,
                     "retest_index": event.get("retest_index"),
                     "fakeout_index": event.get("last_fakeout", {}).get("index") if event.get("last_fakeout") else None,
+                    "role": event.get("role"),
                 },
                 None,
                 context,
@@ -80,8 +80,6 @@ def build_signals_from_state(
         elif event.get("direction") == "down":
             direction = "short"
         else:
-            continue
-        if rules.get("hwc_filter", True) and not _direction_allowed_by_hwc(direction, context):
             continue
         if rules.get("pullback_volume_filter", True) and not context.get("pullback_vol_decline"):
             continue
@@ -105,6 +103,7 @@ def build_signals_from_state(
                 {
                     "type": "retest",
                     "level": level,
+                    "level_role": event.get("role"),
                     "direction": direction,
                     "time": event.get("retest_time"),
                     "entry": candle.close,
@@ -116,6 +115,7 @@ def build_signals_from_state(
                     "break_index": event.get("last_break", {}).get("index") if event.get("last_break") else None,
                     "retest_index": retest_index,
                     "fakeout_index": event.get("last_fakeout", {}).get("index") if event.get("last_fakeout") else None,
+                    "role": event.get("role"),
                 },
                 None,
                 context,
@@ -130,8 +130,6 @@ def build_signals_from_state(
         if item.get("level") in break_levels:
             continue
         direction = item.get("direction")
-        if rules.get("hwc_filter", True) and not _direction_allowed_by_hwc(direction, context):
-            continue
         if rules.get("pullback_volume_filter", True) and not context.get("pullback_vol_decline"):
             continue
         setup_index = item.get("setup_index")
@@ -142,6 +140,7 @@ def build_signals_from_state(
                 {
                     "type": "setup",
                     "level": item.get("level"),
+                    "level_role": item.get("level_role"),
                     "direction": direction,
                     "time": item.get("time"),
                     "entry": item.get("entry"),
@@ -153,6 +152,7 @@ def build_signals_from_state(
                     "break_index": level_event.get("break_index"),
                     "retest_index": level_event.get("retest_index"),
                     "fakeout_index": level_event.get("fakeout_index"),
+                    "role": level_event.get("role"),
                 },
                 setup_index,
                 context,
@@ -172,8 +172,6 @@ def build_signals_from_state(
             direction = "long"
         else:
             continue
-        if rules.get("hwc_filter", True) and not _direction_allowed_by_hwc(direction, context):
-            continue
         idx = last_fakeout.get("index")
         if idx is None or idx >= len(candles):
             continue
@@ -187,6 +185,7 @@ def build_signals_from_state(
                 {
                     "type": "fakeout",
                     "level": event.get("level"),
+                    "level_role": event.get("role"),
                     "direction": direction,
                     "time": last_fakeout.get("time"),
                     "entry": last_fakeout.get("close"),
@@ -198,6 +197,7 @@ def build_signals_from_state(
                     "break_index": event.get("last_break", {}).get("index") if event.get("last_break") else None,
                     "retest_index": event.get("retest_index"),
                     "fakeout_index": idx,
+                    "role": event.get("role"),
                 },
                 None,
                 context,
@@ -205,15 +205,6 @@ def build_signals_from_state(
         )
 
     return signals
-
-
-def _direction_allowed_by_hwc(direction: str | None, context: dict) -> bool:
-    hwc_bias = context.get("hwc_bias")
-    if direction == "long":
-        return hwc_bias == "bullish"
-    if direction == "short":
-        return hwc_bias == "bearish"
-    return False
 
 
 def _signal_payload(

@@ -22,6 +22,28 @@ body {
   background: radial-gradient(circle at top, #ffffff 0%, #f3efe6 45%, #efe9dc 100%);
 }
 
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-panel {
+  width: min(420px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.login-panel h1 {
+  font-size: 1.8rem;
+}
+
 .app {
   max-width: 1100px;
   margin: 32px auto 64px;
@@ -215,12 +237,18 @@ pre {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #f9f6f0;
   border: 1px dashed var(--border);
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.85rem;
+}
+
+.level-list small {
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 
 .inline-form {
@@ -527,6 +555,14 @@ pre {
 
 .chart-canvas-small {
   height: 180px;
+}
+
+.chart-canvas-indicator {
+  height: 150px;
+}
+
+.chart-canvas-hidden {
+  display: none;
 }
 
 .layout {

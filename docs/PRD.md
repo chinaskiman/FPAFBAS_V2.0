@@ -26,11 +26,12 @@ Timeframes:
 •	Entry timeframes: 15m and/or 1h; never below 15m
 
 Levels:
-•	Auto S/R from 1W/1D/4H pivots (2L/2R) + clustering
+•	Auto S/R from confirmed HTF candle color/open/close patterns only.
+•	1H entries use Daily S/R. 15m entries use 4H S/R.
 •	Editable overrides: add/pin levels, disable auto levels
 
 Setup rules:
-•	Break confirmation: any candle close beyond level
+•	Break confirmation: LONG closes above active resistance; SHORT closes below active support
 •	Volume spike: break candle volume is highest of last 10 candles (entry TF)
 •	Continuation: only if volume spike + DI not at peak; otherwise wait retest/setup candle
 •	Retest: wick touch is enough; declining pullback volume; entry on close back in direction; SL beyond retest candle extreme + 0.15%
@@ -39,11 +40,11 @@ Setup rules:
 •	Notifications: Telegram
 •	Hosting: VPS
 6. Definitions
-•	Pivot (2L/2R): pivot high is higher than previous 2 highs and >= next 2 highs; pivot low is lower than previous 2 lows and <= next 2 lows.
-•	HWC direction: computed from Weekly + Daily Dow structure using recent pivots (HH/HL bullish, LL/LH bearish). Mixed/unclear => suppress alerts.
-•	MWC context: computed from Daily + 4H Dow structure using recent pivots. MWC is context only and does not suppress alerts by default.
+•	S/R pattern: resistance is selected from bullish->bearish HTF candle pairs; support is selected from bearish->bullish HTF candle pairs. The detector uses only candle opens, closes, and color.
+•	HWC direction: computed from Weekly + Daily Dow structure for context/analytics only. It does not suppress alerts.
+•	MWC context: computed from Daily + 4H Dow structure for context/analytics only. It does not suppress alerts.
 •	Quality grade: replay/reporting grade derived from signal quality score and W/D/4H/HWC/MWC alignment. A is strongest context, B is valid middle tier, C is weaker context.
-•	Cluster tolerance: levels within X% are grouped; cluster center = mean price.
+•	Active S/R: one active support and one active resistance per symbol/entry timeframe.
 •	Buffer: 0.15% beyond swing HL/LH (used for stop references in alerts).
 7. Data Sources & Ingestion
 •	Candles: 1w, 1d, 4h, 1h, 15m.
@@ -57,12 +58,16 @@ Setup rules:
   - enabled flag
   - entry_tfs (15m, 1h)
   - enabled setups (continuation/retest/fakeout/setup candle)
-  - level settings: auto on/off, max_levels, cluster_tol_pct, overrides.add, overrides.disable
+  - level settings: auto on/off, htf_timeframe, lookback_window, overrides.add, overrides.disable
 
 8.2 Auto S/R Engine (Editable)
-•	Generate candidate levels from 1W/1D/4H pivot highs/lows (2L/2R).
-•	Cluster candidates using cluster_tol_pct (default 0.30%).
-•	Keep top N levels per symbol (default N=12) using TF weights W>D>4H and a touch-count score.
+•	Use only confirmed/closed HTF candles. Never use partially formed HTF candles.
+•	Map entry timeframe to HTF source: 1H entries use 1D candles; 15m entries use 4H candles.
+•	Default lookback_window = 14 completed HTF candles.
+•	Resistance: scan consecutive bullish->bearish HTF pairs. Select the pair whose bullish candle has the highest close. Active resistance is the bearish candle open.
+•	Support: scan consecutive bearish->bullish HTF pairs. Select the pair whose bearish candle has the lowest close. Active support is the bullish candle open.
+•	Levels update only when a new confirmed HTF candle closes. Cache active levels between HTF closes.
+•	The detector must not use pivot highs/lows, swing points, fractals, VWAP, order blocks, clustering, or SMC logic.
 •	Apply overrides:
   - Add/pin levels: always included
   - Disable levels: remove matching auto levels within tolerance
@@ -75,8 +80,8 @@ Setup rules:
 
 8.4 Setup Detection (entry TF on candle close)
 •	Continuation:
-  - HWC aligned
-  - Close breaks level
+  - LONG: entry TF close above active resistance
+  - SHORT: entry TF close below active support
   - Break candle volume is highest of last 10
   - DI not at peak
 •	Retest:
@@ -85,7 +90,7 @@ Setup rules:
   - Alert on close back in direction
   - SL beyond retest candle extreme + 0.15%
 •	Fake-out:
-  - Break against HWC
+  - Failed break of active support/resistance
   - Within 10 candles: retest volume increasing (vol>prev and vol>MA10)
   - Close back inside => alert
   - Include SL note: beyond fake extreme + 0.15%
@@ -100,7 +105,7 @@ Setup rules:
 8.5 Telegram Alerts
 •	Standard message fields:
   - symbol, timeframe, setup type, direction
-  - trigger level and close price
+  - active support/resistance level and close price
   - HWC/MWC context: Weekly, Daily, 4H, HWC, MWC
   - 'why' fields (volume spike, DI peak pass, pullback volume, wick tag, etc.)
   - TradingView link
@@ -134,7 +139,7 @@ Security
 10. Acceptance Criteria (Must Pass)
 Core signal correctness
 1) Given a fixed watchlist.json and the same historical candle stream, alerts are deterministic.
-2) Continuation alert triggers only when: break-close + vol highest(10) + DI not at peak + HWC aligned.
+2) Continuation alert triggers only when: break-close + vol highest(10) + DI not at peak.
 3) Retest alert requires wick tag + declining volume + close back in direction.
 4) Fake-out alert triggers only within 10 candles, with increasing volume condition, and closes back inside.
 5) Setup candle alert triggers on candle close when SMA7/25/99 are present and wick/body + SMA7-behind rules match.
@@ -146,16 +151,18 @@ Ops
 9) UI edits to pinned/disabled levels are reflected in subsequent alerts (after recompute/restart as designed).
 10) Telegram messages send successfully and include required fields.
 11. Edge Cases & Handling
-•	Mixed/unclear HWC structure: suppress all alerts.
-•	Insufficient candles for pivots/indicators: suppress alerts for that symbol/TF until warm.
+•	Mixed/unclear HWC structure: report as neutral context; do not suppress alerts.
+•	Insufficient HTF candles for S/R patterns or insufficient indicators: suppress alerts for that symbol/TF until warm.
 •	Whipsaw around a level: enforce per-symbol cooldown + max alerts/day (spam control).
 •	Multiple levels broken in one candle: allow multiple alerts, but cap per symbol/day.
 •	Restart behavior: on restart, bootstrap history, recompute levels, then continue live scanning.
 •	Binance maintenance/outage: bot should retry with backoff and recover automatically.
 12. Test Plan (Concrete Scenarios)
 Unit tests
-•	Pivot detection (2L/2R) on synthetic series.
-•	Level clustering and override application.
+•	S/R candle-pattern detection on synthetic HTF series.
+•	Entry timeframe to HTF mapping: 1H->1D and 15m->4H.
+•	Role-aware breakouts: long only above resistance, short only below support.
+•	Level override application.
 •	Volume highest(10) logic.
 •	DI peak zone construction + proximity check.
 •	Setup candle wick/body + SMA7-behind logic.
@@ -163,7 +170,7 @@ Unit tests
 
 Integration tests
 •	Replay historical klines for 15m/1h and verify alert timestamps.
-•	Run 30-day replay on liquid symbols and compare setup performance before promoting MWC or grade rules into hard filters.
+•	Run 30-day replay on liquid symbols and compare setup performance before changing active filters.
 •	Simulate WS disconnect (force close) and confirm reconnect.
 •	UI edits: add/disable levels and verify effective levels update.
 

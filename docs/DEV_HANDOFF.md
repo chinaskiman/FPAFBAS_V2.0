@@ -20,8 +20,8 @@ Always-on service on a VPS that monitors Binance USDT perpetual futures. Signals
                ▼                                        ▼
 ┌──────────────────────────────┐           ┌──────────────────────────────┐
 │      Levels Engine (S/R)      │           │       Strategy Engine        │
-│  - pivots 2L/2R on 1w/1d/4h   │           │  - HWC bias + MWC context    │
-│  - clustering tol%            │           │  - continuation/retest/...   │
+│  - HTF candle pattern S/R     │           │  - HWC bias + MWC context    │
+│  - 1h->1d, 15m->4h mapping    │           │  - continuation/retest/...   │
 │  - overrides: add/disable     │           │  - DI peak zones (Option 1)  │
 └──────────────┬───────────────┘           └──────────────┬───────────────┘
                │                                          │
@@ -50,32 +50,33 @@ Always-on service on a VPS that monitors Binance USDT perpetual futures. Signals
 •	Binance Ingest: Subscribe to 15m/1h kline close events (WebSocket). Bootstrap higher TF history (REST). Reconnect with backoff.
 •	Candle Cache: In-memory ring buffer per (symbol, tf) storing OHLCV + timestamps. Persisting raw candles is optional.
 •	Indicators: Compute RSI(14), ATR(5), SMA(7/25/99), DI+/DI-, ADX(14), volume stats. Calculations run after candle close.
-•	Levels Engine: Auto S/R from 1W/1D/4H pivot highs/lows (2L/2R) + clustering. Apply overrides (add/pin, disable).
+•	Levels Engine: Auto S/R from confirmed HTF candle color/open/close patterns only. 1H entries use Daily S/R; 15m entries use 4H S/R. Apply overrides (add/pin, disable).
 •	DI Peak Engine (Option 1): Build DI peak zones from DI pivot highs (2L/2R) + clustering; flag DI 'at peak' if within 3% of a zone.
-•	Strategy Engine: Implements HWC bias filter, MWC context (1D+4H), and setup detection (Continuation/Retest/Fake-out/Setup candle). Outputs alert candidates.
+•	Strategy Engine: Implements setup detection (Continuation/Retest/Fake-out/Setup candle). HWC/MWC are context/analytics only and do not suppress alerts.
 •	Replay Performance Engine: Groups replay outcomes by setup, symbol, timeframe, direction, HWC, MWC, and A/B/C quality grade.
 •	Alert Orchestrator: Spam control (cooldown + daily cap). Formats Telegram message + structured JSON payload.
 •	Notifier: Send Telegram alerts.
 •	Storage: Log alerts to SQLite (recommended) for audit and UI history.
 •	Web UI: CRUD for watchlist and level overrides; read alert history.
 4) Deterministic Strategy Logic (Locked Rules)
-Trend filter (HWC):
-•	Compute Dow structure on 1W and 1D using pivot swings (2L/2R).
-•	Bullish if latest swings show HH + HL. Bearish if LL + LH. Mixed/unclear => suppress all alerts.
-•	Trade direction = HWC direction only.
-MWC context:
-•	Compute Dow structure on 1D and 4H using the same pivot swing logic.
-•	MWC is reported in signal context, Telegram messages, replay grouping, and dashboard tables.
-•	MWC does not suppress alerts by default; use replay results before promoting it to a hard filter.
+Bias context:
+•	Compute HWC Dow structure on 1W and 1D using pivot swings (2L/2R).
+•	Compute MWC Dow structure on 1D and 4H using the same pivot swing logic.
+•	HWC and MWC are reported in signal context, Telegram messages, replay grouping, and dashboard tables.
+•	HWC and MWC do not suppress alerts.
 Levels (S/R):
-•	Detect pivot highs/lows on 1W/1D/4H using 2L/2R.
-•	Cluster candidate prices within cluster_tol_pct (default 0.30%).
-•	Keep top N levels (default 12) using TF weights W>D>4H and touch count scoring.
+•	Use only confirmed/closed HTF candles.
+•	For 1H entry evaluation, calculate S/R from 1D candles. For 15m entry evaluation, calculate S/R from 4H candles.
+•	Default lookback is 14 completed HTF candles.
+•	Resistance: scan bullish->bearish HTF pairs, choose the pair with the highest bullish close, and use the bearish candle open.
+•	Support: scan bearish->bullish HTF pairs, choose the pair with the lowest bearish close, and use the bullish candle open.
+•	There is one active resistance and one active support. Recompute only on new confirmed HTF closes and cache active levels between HTF closes.
+•	Do not use pivot highs/lows, swing points, fractals, VWAP, order blocks, clustering, or other SMC logic for S/R.
 •	Apply overrides: add/pin levels always included; disable removes matching auto levels within tolerance.
 Setups (evaluated on entry TF candle close):
-•	Continuation (strong momentum only): candle closes beyond a level in HWC direction AND volume is highest of last 10 candles AND DI not at peak.
+•	Continuation (strong momentum only): LONG closes above active resistance or SHORT closes below active support AND volume is highest of last 10 candles AND DI not at peak.
 •	Retest: wick tags the level; pullback volume is declining; alert triggers on close back in trend direction. SL beyond retest candle extreme + 0.15%.
-•	Fake-out (within 10 candles): break against HWC direction; retest volume increasing (vol > prev AND vol > MA10); candle closes back inside => alert. Include SL note: beyond fake extreme + 0.15%.
+•	Fake-out (within 10 candles): failed break of active support/resistance; retest volume increasing (vol > prev AND vol > MA10); candle closes back inside => alert. Include SL note: beyond fake extreme + 0.15%.
 •	Setup Candle: SMA(7/25/99) present; wick >= 1.5× body (directional); SMA7 behind candle body; alert on close; SL other side of candle. LONG requires bullish body + lower rejection wick + SMA7 at/below body low. SHORT requires bearish body + upper rejection wick + SMA7 at/above body high.
 5) Data Contracts
 watchlist.json example (dev contract):
@@ -98,6 +99,8 @@ watchlist.json example (dev contract):
         "auto": true,
         "max_levels": 12,
         "cluster_tol_pct": 0.003,
+        "htf_timeframe": "auto",
+        "lookback_window": 14,
         "overrides": {
           "add": [
             42000.0,
@@ -167,6 +170,6 @@ Structured payload (stored in DB) should include:
 •	Replay historical klines to validate each setup triggers at correct candle close.
 •	Use 30-day replay reports on liquid symbols before changing setup filters.
 •	Compare setup type, timeframe, direction, HWC/MWC context, quality grade, win rate, realized R, max RR, and drawdown R.
-•	Validate pivot detection and clustering with unit tests.
+•	Validate HTF candle-pattern S/R detection and entry-TF mapping with unit tests.
 •	Disconnect WS to ensure auto reconnect.
 •	Edit levels in UI and confirm they affect alerts.

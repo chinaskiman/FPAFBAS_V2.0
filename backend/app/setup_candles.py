@@ -65,6 +65,7 @@ def detect_setup_candles(
                     last_break,
                     retest_index,
                     last_fakeout,
+                    event.get("role"),
                 )
             elif direction == "down":
                 if candle.close >= level:
@@ -87,6 +88,7 @@ def detect_setup_candles(
                     last_break,
                     retest_index,
                     last_fakeout,
+                    event.get("role"),
                 )
 
         if last_setup:
@@ -143,6 +145,7 @@ def _setup_payload(
     last_break: dict,
     retest_index: int,
     last_fakeout: dict | None,
+    level_role: str | None,
 ) -> dict:
     body = abs(candle.close - candle.open)
     lower_wick = min(candle.open, candle.close) - candle.low
@@ -151,6 +154,7 @@ def _setup_payload(
     wick_body_ratio = directional_wick / body if body else None
     return {
         "level": level,
+        "level_role": level_role,
         "direction": direction,
         "setup_index": idx,
         "time": candle.close_time,
@@ -167,5 +171,6 @@ def _setup_payload(
             "break_index": last_break.get("index") if last_break else None,
             "retest_index": retest_index,
             "fakeout_index": last_fakeout.get("index") if last_fakeout else None,
+            "role": level_role,
         },
     }
