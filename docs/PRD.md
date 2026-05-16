@@ -5,7 +5,7 @@ v1.0 | Date: 2026-02-03 | Scope: Alert-only (no auto-trading)
 Build an always-on alert system that monitors Binance USDT perpetual futures 24/7, detects the user's predefined crypto trading setups on candle close (15m and 1h), and notifies via Telegram. A simple web UI allows watchlist and S/R level management, plus an alert history view. The system must be deterministic and match the agreed rulebook.
 2. Goals
 •	Detect the agreed setups (Continuation, Retest, Fake-out, Setup Candle) reliably on candle close.
-•	Auto-generate Support/Resistance (S/R) from higher timeframes and allow manual overrides.
+•	Detect active Support/Resistance (S/R) from higher timeframes and allow manual overrides.
 •	Provide Telegram alerts with consistent, standardized context.
 •	Provide a minimal UI to manage symbols/levels and view alerts.
 •	Run continuously on a VPS with restart-on-failure.
@@ -26,9 +26,9 @@ Timeframes:
 •	Entry timeframes: 15m and/or 1h; never below 15m
 
 Levels:
-•	Auto S/R from confirmed HTF candle color/open/close patterns only.
+•	Active S/R from confirmed HTF candle color/open/close patterns only.
 •	1H entries use Daily S/R. 15m entries use 4H S/R.
-•	Editable overrides: add/pin levels, disable auto levels
+•	Editable overrides: add/pin levels, disable detected levels
 
 Setup rules:
 •	Break confirmation: LONG closes above active resistance; SHORT closes below active support
@@ -58,9 +58,9 @@ Setup rules:
   - enabled flag
   - entry_tfs (15m, 1h)
   - enabled setups (continuation/retest/fakeout/setup candle)
-  - level settings: auto on/off, htf_timeframe, lookback_window, overrides.add, overrides.disable
+  - level settings: htf_timeframe, lookback_window, overrides.add, overrides.disable
 
-8.2 Auto S/R Engine (Editable)
+8.2 Active S/R Engine (Editable)
 •	Use only confirmed/closed HTF candles. Never use partially formed HTF candles.
 •	Map entry timeframe to HTF source: 1H entries use 1D candles; 15m entries use 4H candles.
 •	Default lookback_window = 14 completed HTF candles.
@@ -70,7 +70,7 @@ Setup rules:
 •	The detector must not use pivot highs/lows, swing points, fractals, VWAP, order blocks, clustering, or SMC logic.
 •	Apply overrides:
   - Add/pin levels: always included
-  - Disable levels: remove matching auto levels within tolerance
+  - Disable levels: remove matching detected levels within tolerance
 
 8.3 DI Peak Filter (Option 1)
 •	Compute DI+/DI-.

@@ -64,10 +64,14 @@ docker compose version >/dev/null 2>&1 || fail "docker compose plugin is not ins
 ADMIN_TOKEN="$(read_env_value "ADMIN_TOKEN")"
 DOMAIN="$(read_env_value "DOMAIN")"
 ACME_EMAIL="$(read_env_value "ACME_EMAIL")"
+APP_LOGIN_USERNAME="$(read_env_value "APP_LOGIN_USERNAME")"
+APP_LOGIN_PASSWORD="$(read_env_value "APP_LOGIN_PASSWORD")"
 
 [[ -n "${ADMIN_TOKEN}" && "${ADMIN_TOKEN}" != "change-me-with-a-long-random-token" ]] || fail "Set a strong ADMIN_TOKEN in .env."
 [[ -n "${DOMAIN}" && "${DOMAIN}" != "example.com" ]] || fail "Set DOMAIN in .env to your real hostname."
 [[ -n "${ACME_EMAIL}" && "${ACME_EMAIL}" != "admin@example.com" ]] || fail "Set ACME_EMAIL in .env."
+[[ -n "${APP_LOGIN_USERNAME}" ]] || fail "Set APP_LOGIN_USERNAME in .env for public VPS access."
+[[ -n "${APP_LOGIN_PASSWORD}" && "${APP_LOGIN_PASSWORD}" != "change-this-password" ]] || fail "Set a strong APP_LOGIN_PASSWORD in .env."
 
 if is_existing_stack_running; then
   log "Existing stack detected; skipping host port checks."

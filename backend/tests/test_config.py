@@ -20,9 +20,8 @@ def base_watchlist() -> dict:
                     "setup_candle": True,
                 },
                 "levels": {
-                    "auto": True,
-                    "max_levels": 12,
-                    "cluster_tol_pct": 0.003,
+                    "htf_timeframe": "auto",
+                    "lookback_window": 14,
                     "overrides": {"add": [42000.0], "disable": []},
                 },
             }
@@ -48,8 +47,8 @@ def test_invalid_entry_tf_rejected() -> None:
         WatchlistConfig.model_validate(data)
 
 
-def test_invalid_cluster_tol_rejected() -> None:
+def test_invalid_lookback_rejected() -> None:
     data = base_watchlist()
-    data["symbols"][0]["levels"]["cluster_tol_pct"] = -0.1
+    data["symbols"][0]["levels"]["lookback_window"] = 1
     with pytest.raises(ValidationError):
         WatchlistConfig.model_validate(data)

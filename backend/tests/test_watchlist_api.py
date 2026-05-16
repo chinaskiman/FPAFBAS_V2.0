@@ -1,4 +1,4 @@
-import json
+﻿import json
 
 from fastapi.testclient import TestClient
 
@@ -28,8 +28,6 @@ def _base_watchlist():
                 "setups": {"continuation": True, "retest": True, "fakeout": True, "setup_candle": True},
                 "levels": {
                     "auto": True,
-                    "max_levels": 12,
-                    "cluster_tol_pct": 0.003,
                     "overrides": {"add": [], "disable": []},
                 },
             }
@@ -53,8 +51,6 @@ def test_watchlist_put_add_update_remove(monkeypatch, tmp_path):
                 "setups": {"continuation": True, "retest": True, "fakeout": True, "setup_candle": True},
                 "levels": {
                     "auto": True,
-                    "max_levels": 12,
-                    "cluster_tol_pct": 0.003,
                     "overrides": {"add": [], "disable": []},
                 },
             }
@@ -99,8 +95,6 @@ def test_watchlist_put_invalid_symbol(monkeypatch, tmp_path):
                 "setups": {"continuation": True, "retest": True, "fakeout": True, "setup_candle": True},
                 "levels": {
                     "auto": True,
-                    "max_levels": 12,
-                    "cluster_tol_pct": 0.003,
                     "overrides": {"add": [], "disable": []},
                 },
             }
@@ -127,8 +121,6 @@ def test_watchlist_put_triggers_ingest_sync(monkeypatch, tmp_path):
                 "setups": {"continuation": True, "retest": True, "fakeout": True, "setup_candle": True},
                 "levels": {
                     "auto": True,
-                    "max_levels": 12,
-                    "cluster_tol_pct": 0.003,
                     "overrides": {"add": [], "disable": []},
                 },
             }
@@ -141,8 +133,6 @@ def test_watchlist_put_triggers_ingest_sync(monkeypatch, tmp_path):
                 "setups": {"continuation": True, "retest": True, "fakeout": True, "setup_candle": True},
                 "levels": {
                     "auto": True,
-                    "max_levels": 12,
-                    "cluster_tol_pct": 0.003,
                     "overrides": {"add": [], "disable": []},
                 },
             }

@@ -1,4 +1,4 @@
-import json
+﻿import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -162,8 +162,6 @@ def test_level_events_api(tmp_path, monkeypatch) -> None:
                 },
                 "levels": {
                     "auto": True,
-                    "max_levels": 5,
-                    "cluster_tol_pct": 0.01,
                     "overrides": {"add": [100.0], "disable": []},
                 },
             }

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import io
@@ -97,7 +97,16 @@ async def require_app_login(request: Request, call_next):
     if not auth_required():
         return await call_next(request)
     path = request.url.path
-    public_paths = {"/health", "/healthz", "/readyz", "/api/auth/me", "/api/auth/login", "/api/auth/logout"}
+    public_paths = {
+        "/health",
+        "/healthz",
+        "/readyz",
+        "/api/healthz",
+        "/api/readyz",
+        "/api/auth/me",
+        "/api/auth/login",
+        "/api/auth/logout",
+    }
     if path in public_paths or path.startswith("/docs") or path.startswith("/openapi"):
         return await call_next(request)
     if path.startswith("/api/") and not session_valid(request.cookies.get(SESSION_COOKIE_NAME)):
@@ -185,6 +194,7 @@ def health() -> dict:
 
 
 @app.get("/healthz")
+@app.get("/api/healthz")
 def healthz() -> dict:
     return {"ok": True, "ts": int(time.time() * 1000)}
 
@@ -201,6 +211,7 @@ def _check_watchlist_dir() -> bool:
 
 
 @app.get("/readyz")
+@app.get("/api/readyz")
 def readyz() -> dict:
     db_ok = check_db()
     watchlist_ok = _check_watchlist_dir()
@@ -759,17 +770,15 @@ def api_chart_bundle(symbol: str, tf: str, limit: int = 500) -> dict:
         htf_cache = ingest.get_cache(symbol, htf)
         candles_by_tf[htf] = htf_cache.list_all() if htf_cache else []
 
-    auto_levels, _selected, clusters, meta = compute_levels(
+    detected_levels, _selected, clusters, meta = compute_levels(
         candles_by_tf,
-        symbol_config.levels.cluster_tol_pct,
-        symbol_config.levels.max_levels,
         entry_tf=tf,
         htf_timeframe=symbol_config.levels.htf_timeframe,
         lookback=symbol_config.levels.lookback_window,
     )
-    tol_pct_used = meta.get("tol_pct_used", symbol_config.levels.cluster_tol_pct)
+    tol_pct_used = meta.get("tol_pct_used")
     overrides = symbol_config.levels.overrides
-    merged = apply_overrides(auto_levels, overrides.add, overrides.disable, tol_pct_used)
+    merged = apply_overrides(detected_levels, overrides.add, overrides.disable, tol_pct_used)
     final_levels_detailed = build_levels_detailed(
         merged["final_levels"],
         clusters,
@@ -942,10 +951,8 @@ def api_levels(symbol: str, debug: int = 0, entry_tf: str = "15m") -> dict:
         cache = ingest.get_cache(symbol, tf)
         candles_by_tf[tf] = cache.list_all() if cache else []
 
-    auto_levels, _selected, clusters, meta = compute_levels(
+    detected_levels, _selected, clusters, meta = compute_levels(
         candles_by_tf,
-        symbol_config.levels.cluster_tol_pct,
-        symbol_config.levels.max_levels,
         entry_tf=entry_tf,
         htf_timeframe=symbol_config.levels.htf_timeframe,
         lookback=symbol_config.levels.lookback_window,
@@ -953,9 +960,9 @@ def api_levels(symbol: str, debug: int = 0, entry_tf: str = "15m") -> dict:
     last_close_used = meta.get("last_close_used")
     below_count = meta.get("below_count", 0)
     above_count = meta.get("above_count", 0)
-    tol_pct_used = meta.get("tol_pct_used", symbol_config.levels.cluster_tol_pct)
+    tol_pct_used = meta.get("tol_pct_used")
     overrides = symbol_config.levels.overrides
-    merged = apply_overrides(auto_levels, overrides.add, overrides.disable, tol_pct_used)
+    merged = apply_overrides(detected_levels, overrides.add, overrides.disable, tol_pct_used)
     final_levels_detailed = build_levels_detailed(
         merged["final_levels"],
         clusters,
@@ -968,15 +975,13 @@ def api_levels(symbol: str, debug: int = 0, entry_tf: str = "15m") -> dict:
         "entry_tf": entry_tf,
         "htf_timeframe": meta.get("htf_timeframe"),
         "lookback_window": meta.get("lookback"),
-        "level_match_tol_pct": symbol_config.levels.cluster_tol_pct,
         "tol_pct_used": tol_pct_used,
-        "max_levels": symbol_config.levels.max_levels,
         "last_close_used": last_close_used,
         "below_count": below_count,
         "above_count": above_count,
         "support": meta.get("support"),
         "resistance": meta.get("resistance"),
-        "auto_levels": auto_levels,
+        "detected_levels": detected_levels,
         "pinned_levels": merged["pinned_levels"],
         "disabled_levels": merged["disabled_levels"],
         "final_levels": merged["final_levels"],
@@ -1022,8 +1027,6 @@ def api_debug_levels(symbol: str, entry_tf: str = "15m") -> dict:
 
     _, selected, clusters, _meta = compute_levels(
         candles_by_tf,
-        symbol_config.levels.cluster_tol_pct,
-        symbol_config.levels.max_levels,
         entry_tf=entry_tf,
         htf_timeframe=symbol_config.levels.htf_timeframe,
         lookback=symbol_config.levels.lookback_window,
@@ -1200,17 +1203,15 @@ def api_level_events(
     for htf in HTF_TFS:
         htf_cache = ingest.get_cache(symbol, htf)
         candles_by_tf[htf] = htf_cache.list_all() if htf_cache else []
-    auto_levels, _selected, clusters, meta = compute_levels(
+    detected_levels, _selected, clusters, meta = compute_levels(
         candles_by_tf,
-        symbol_config.levels.cluster_tol_pct,
-        symbol_config.levels.max_levels,
         entry_tf=tf,
         htf_timeframe=symbol_config.levels.htf_timeframe,
         lookback=symbol_config.levels.lookback_window,
     )
-    tol_pct_used = meta.get("tol_pct_used", symbol_config.levels.cluster_tol_pct)
+    tol_pct_used = meta.get("tol_pct_used")
     overrides = symbol_config.levels.overrides
-    merged = apply_overrides(auto_levels, overrides.add, overrides.disable, tol_pct_used)
+    merged = apply_overrides(detected_levels, overrides.add, overrides.disable, tol_pct_used)
     final_levels = merged["final_levels"]
     final_levels_detailed = build_levels_detailed(
         final_levels,
@@ -1291,17 +1292,15 @@ def api_setup_candles(symbol: str, tf: str, limit: int = 300) -> dict:
     for htf in HTF_TFS:
         htf_cache = ingest.get_cache(symbol, htf)
         candles_by_tf[htf] = htf_cache.list_all() if htf_cache else []
-    auto_levels, _, clusters, meta = compute_levels(
+    detected_levels, _, clusters, meta = compute_levels(
         candles_by_tf,
-        symbol_config.levels.cluster_tol_pct,
-        symbol_config.levels.max_levels,
         entry_tf=tf,
         htf_timeframe=symbol_config.levels.htf_timeframe,
         lookback=symbol_config.levels.lookback_window,
     )
-    tol_pct_used = meta.get("tol_pct_used", symbol_config.levels.cluster_tol_pct)
+    tol_pct_used = meta.get("tol_pct_used")
     overrides = symbol_config.levels.overrides
-    merged = apply_overrides(auto_levels, overrides.add, overrides.disable, tol_pct_used)
+    merged = apply_overrides(detected_levels, overrides.add, overrides.disable, tol_pct_used)
     final_levels = merged["final_levels"]
     final_levels_detailed = build_levels_detailed(
         final_levels,
@@ -1491,3 +1490,4 @@ def api_debug_pivots(symbol: str, tf: str, limit: int = 200) -> dict:
         "pivot_high": pivot_high,
         "pivot_low": pivot_low,
     }
+

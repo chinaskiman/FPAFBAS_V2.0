@@ -116,8 +116,6 @@ def compute_active_levels(
 
 def compute_levels(
     candles_by_tf: Dict[str, List[Candle]],
-    tol_pct: float,
-    max_levels: int,
     entry_tf: str | None = None,
     htf_timeframe: str | None = None,
     lookback: int = DEFAULT_SR_LOOKBACK,
@@ -129,28 +127,28 @@ def compute_levels(
         lookback=lookback,
     )
     meta = result["meta"]
-    meta["tol_pct_used"] = tol_pct if tol_pct > 0 else DEFAULT_TOL_PCT
+    meta["tol_pct_used"] = DEFAULT_TOL_PCT
     return result["levels"], result["selected"], result["clusters"], meta
 
 
 def apply_overrides(
-    auto_levels: Iterable[float],
+    detected_levels: Iterable[float],
     pinned_levels: Iterable[float],
     disabled_levels: Iterable[float],
     tol_pct: float,
 ) -> dict:
     pinned = sorted(set(float(val) for val in pinned_levels))
     disabled = sorted(set(float(val) for val in disabled_levels))
-    filtered_auto: List[float] = []
-    for level in auto_levels:
+    filtered_detected: List[float] = []
+    for level in detected_levels:
         if _within_any(level, disabled, tol_pct):
             continue
         if _within_any(level, pinned, tol_pct):
             continue
-        filtered_auto.append(level)
-    final_levels = sorted(filtered_auto + pinned)
+        filtered_detected.append(level)
+    final_levels = sorted(filtered_detected + pinned)
     return {
-        "auto_levels": list(auto_levels),
+        "detected_levels": list(detected_levels),
         "pinned_levels": pinned,
         "disabled_levels": disabled,
         "final_levels": final_levels,
@@ -208,26 +206,6 @@ def level_roles_from_details(details: Iterable[dict]) -> dict[float, str]:
             continue
         roles[float(level)] = str(role)
     return roles
-
-
-def balance_levels(
-    auto_levels: List[float],
-    last_close: float,
-    target: int,
-    min_below: int = 1,
-    min_above: int = 1,
-) -> List[float]:
-    if target <= 0:
-        return []
-    below = sorted([level for level in set(auto_levels) if level < last_close], reverse=True)
-    above = sorted([level for level in set(auto_levels) if level > last_close])
-    selected = below[:min_below] + above[:min_above]
-    for level in sorted(set(auto_levels), key=lambda item: abs(item - last_close)):
-        if len(selected) >= target:
-            break
-        if level not in selected:
-            selected.append(level)
-    return sorted(selected[:target])
 
 
 def _detect_active_patterns(candles: List[Candle], htf: str) -> tuple[ActiveLevel | None, ActiveLevel | None]:

@@ -2,7 +2,7 @@ Developer Handoff — Binance USDT Perpetual Futures Alert Bot (Telegram + UI)
 v1.0 | Date: 2026-02-03 | Alert-only, deterministic strategy checks (no auto-trading)
 
 1) System Overview
-Always-on service on a VPS that monitors Binance USDT perpetual futures. Signals are evaluated deterministically on candle close for 15m and 1h. Alerts are sent to Telegram and logged. A minimal web UI edits watchlist and levels overrides.
+Always-on service on a VPS that monitors Binance USDT perpetual futures. Signals are evaluated deterministically on candle close for 15m and 1h. Alerts are sent to Telegram and logged. A minimal web UI edits watchlist and level overrides.
 2) Architecture Diagram
                 ┌──────────────────────────────┐
                 │         Binance (Futures)    │
@@ -50,7 +50,7 @@ Always-on service on a VPS that monitors Binance USDT perpetual futures. Signals
 •	Binance Ingest: Subscribe to 15m/1h kline close events (WebSocket). Bootstrap higher TF history (REST). Reconnect with backoff.
 •	Candle Cache: In-memory ring buffer per (symbol, tf) storing OHLCV + timestamps. Persisting raw candles is optional.
 •	Indicators: Compute RSI(14), ATR(5), SMA(7/25/99), DI+/DI-, ADX(14), volume stats. Calculations run after candle close.
-•	Levels Engine: Auto S/R from confirmed HTF candle color/open/close patterns only. 1H entries use Daily S/R; 15m entries use 4H S/R. Apply overrides (add/pin, disable).
+•	Levels Engine: Active S/R from confirmed HTF candle color/open/close patterns only. 1H entries use Daily S/R; 15m entries use 4H S/R. Apply overrides (add/pin, disable).
 •	DI Peak Engine (Option 1): Build DI peak zones from DI pivot highs (2L/2R) + clustering; flag DI 'at peak' if within 3% of a zone.
 •	Strategy Engine: Implements setup detection (Continuation/Retest/Fake-out/Setup candle). HWC/MWC are context/analytics only and do not suppress alerts.
 •	Replay Performance Engine: Groups replay outcomes by setup, symbol, timeframe, direction, HWC, MWC, and A/B/C quality grade.
@@ -72,7 +72,7 @@ Levels (S/R):
 •	Support: scan bearish->bullish HTF pairs, choose the pair with the lowest bearish close, and use the bullish candle open.
 •	There is one active resistance and one active support. Recompute only on new confirmed HTF closes and cache active levels between HTF closes.
 •	Do not use pivot highs/lows, swing points, fractals, VWAP, order blocks, clustering, or other SMC logic for S/R.
-•	Apply overrides: add/pin levels always included; disable removes matching auto levels within tolerance.
+•	Apply overrides: add/pin levels always included; disable removes matching detected levels within tolerance.
 Setups (evaluated on entry TF candle close):
 •	Continuation (strong momentum only): LONG closes above active resistance or SHORT closes below active support AND volume is highest of last 10 candles AND DI not at peak.
 •	Retest: wick tags the level; pullback volume is declining; alert triggers on close back in trend direction. SL beyond retest candle extreme + 0.15%.
@@ -96,9 +96,6 @@ watchlist.json example (dev contract):
         "setup_candle": true
       },
       "levels": {
-        "auto": true,
-        "max_levels": 12,
-        "cluster_tol_pct": 0.003,
         "htf_timeframe": "auto",
         "lookback_window": 14,
         "overrides": {

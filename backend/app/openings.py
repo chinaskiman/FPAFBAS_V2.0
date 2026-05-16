@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from .di_peak import DI_PEAK_WINDOW_DEFAULT, compute_di_peak_flags
 from .hwc import compute_hwc_bias, compute_mwc_bias
@@ -115,17 +115,15 @@ def build_openings(ingest, config, symbol: str, tf: str, limit: int = 300) -> di
     for htf in HTF_TFS:
         htf_cache = ingest.get_cache(symbol_upper, htf)
         candles_by_tf[htf] = htf_cache.list_all() if htf_cache else []
-    auto_levels, _, clusters, meta = compute_levels(
+    detected_levels, _, clusters, meta = compute_levels(
         candles_by_tf,
-        symbol_config.levels.cluster_tol_pct,
-        symbol_config.levels.max_levels,
         entry_tf=tf,
         htf_timeframe=symbol_config.levels.htf_timeframe,
         lookback=symbol_config.levels.lookback_window,
     )
-    tol_pct_used = meta.get("tol_pct_used", symbol_config.levels.cluster_tol_pct)
+    tol_pct_used = meta.get("tol_pct_used")
     overrides = symbol_config.levels.overrides
-    merged = apply_overrides(auto_levels, overrides.add, overrides.disable, tol_pct_used)
+    merged = apply_overrides(detected_levels, overrides.add, overrides.disable, tol_pct_used)
     final_levels = merged["final_levels"]
     final_levels_detailed = build_levels_detailed(
         final_levels,
@@ -171,3 +169,4 @@ def build_openings(ingest, config, symbol: str, tf: str, limit: int = 300) -> di
         "last_candle_time": last_candle_time,
         "signals": signals,
     }
+

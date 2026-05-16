@@ -1,4 +1,4 @@
-import json
+﻿import json
 
 from app.alert_poller import AlertPoller
 from app.storage import init_db, list_alerts
@@ -33,8 +33,6 @@ def test_alert_polling_dedup(tmp_path, monkeypatch) -> None:
                 },
                 "levels": {
                     "auto": True,
-                    "max_levels": 5,
-                    "cluster_tol_pct": 0.01,
                     "overrides": {"add": [100.0], "disable": []},
                 },
             }

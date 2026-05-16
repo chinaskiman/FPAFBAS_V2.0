@@ -1,4 +1,4 @@
-import json
+﻿import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -89,8 +89,6 @@ def _watchlist(tmp_path: Path, level: float, rules: dict | None = None, setups: 
                 },
                 "levels": {
                     "auto": True,
-                    "max_levels": 5,
-                    "cluster_tol_pct": 0.01,
                     "overrides": {"add": [level], "disable": []},
                 },
             }

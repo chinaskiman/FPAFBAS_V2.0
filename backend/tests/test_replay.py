@@ -1,4 +1,4 @@
-from fastapi.testclient import TestClient
+﻿from fastapi.testclient import TestClient
 
 from app import main as main_module
 from app.candle_cache import Candle, CandleCache
@@ -85,8 +85,6 @@ def _make_watchlist(pinned=None, rules=None) -> WatchlistConfig:
                     },
                     "levels": {
                         "auto": True,
-                        "max_levels": 6,
-                        "cluster_tol_pct": 0.05,
                         "overrides": {"add": pinned or [], "disable": []},
                     },
                     "rules": rules or {

@@ -34,6 +34,7 @@ cp .env.example .env
 
 Set these in `.env`:
 - `ADMIN_TOKEN` (long random value)
+- `APP_LOGIN_USERNAME` and `APP_LOGIN_PASSWORD` (required for public VPS deploys)
 - `DOMAIN` (example: `bot.example.com`)
 - `ACME_EMAIL` (Let's Encrypt email)
 - `CORS_ORIGINS=https://<DOMAIN>`
@@ -68,6 +69,7 @@ bash scripts/vps_deploy.sh --no-build
 
 Required for admin/ops:
 - `ADMIN_TOKEN` (Bearer token for `/api/poller/*`, `/api/telegram/test`, CSV exports, forward-test mode)
+- `APP_LOGIN_USERNAME`, `APP_LOGIN_PASSWORD` (browser login for `/api/*`; required by VPS preflight)
 
 Core runtime:
 - `DATA_DIR` (default: `/data`)
@@ -116,6 +118,8 @@ Caddy cert/state volumes:
   ```bash
   bash scripts/vps_healthcheck.sh
   ```
+
+The health check intentionally uses public readiness/auth endpoints, so it works whether browser login is enabled or disabled.
 
 ## Backups and Restore
 

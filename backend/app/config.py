@@ -34,9 +34,6 @@ class LevelOverrides(BaseModel):
 
 
 class LevelsConfig(BaseModel):
-    auto: bool
-    max_levels: int = Field(ge=1)
-    cluster_tol_pct: float = Field(gt=0, lt=1)
     htf_timeframe: Literal["auto", "1d", "4h"] = "auto"
     lookback_window: int = Field(default=14, ge=2)
     overrides: LevelOverrides

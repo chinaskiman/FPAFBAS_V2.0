@@ -39,8 +39,6 @@ def test_candle_pattern_levels_use_open_close_only() -> None:
     ]
     levels, selected, _clusters, meta = compute_levels(
         {"4h": candles},
-        tol_pct=0.003,
-        max_levels=12,
         entry_tf="15m",
         lookback=14,
     )
@@ -56,8 +54,6 @@ def test_daily_levels_are_used_for_1h_entries() -> None:
     four_hour = [_candle(0, 200, 210), _candle(1, 211, 205)]
     levels, _selected, _clusters, meta = compute_levels(
         {"1d": daily, "4h": four_hour},
-        tol_pct=0.003,
-        max_levels=12,
         entry_tf="1h",
     )
     assert levels == [111]

@@ -4925,9 +4925,6 @@ function buildWatchlistSymbolEntry(template, symbol, entryTfs) {
   const levels = template?.levels
     ? structuredClone(template.levels)
     : {
-        auto: true,
-        max_levels: 12,
-        cluster_tol_pct: 0.003,
         htf_timeframe: "auto",
         lookback_window: 14,
         overrides: { add: [], disable: [] }

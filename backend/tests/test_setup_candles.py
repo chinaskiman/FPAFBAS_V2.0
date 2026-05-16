@@ -1,4 +1,4 @@
-import json
+﻿import json
 from pathlib import Path
 
 import pytest
@@ -203,8 +203,6 @@ def test_setup_candles_endpoint(tmp_path, monkeypatch) -> None:
                 },
                 "levels": {
                     "auto": True,
-                    "max_levels": 5,
-                    "cluster_tol_pct": 0.01,
                     "overrides": {"add": [100.0], "disable": []},
                 },
             }

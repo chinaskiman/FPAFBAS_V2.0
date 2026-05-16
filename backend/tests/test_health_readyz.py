@@ -1,4 +1,4 @@
-import json
+﻿import json
 
 from fastapi.testclient import TestClient
 
@@ -23,8 +23,6 @@ def test_healthz_readyz(monkeypatch, tmp_path) -> None:
                         },
                         "levels": {
                             "auto": True,
-                            "max_levels": 12,
-                            "cluster_tol_pct": 0.003,
                             "overrides": {"add": [], "disable": []},
                         },
                     }

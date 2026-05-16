@@ -44,7 +44,7 @@ The web UI will be at `http://localhost/`.
 
 ```bash
 cp .env.example .env
-# set ADMIN_TOKEN, DOMAIN, ACME_EMAIL, CORS_ORIGINS=https://<DOMAIN>
+# set ADMIN_TOKEN, APP_LOGIN_USERNAME, APP_LOGIN_PASSWORD, DOMAIN, ACME_EMAIL, CORS_ORIGINS=https://<DOMAIN>
 chmod +x scripts/vps_preflight.sh scripts/vps_deploy.sh scripts/vps_healthcheck.sh
 bash scripts/vps_deploy.sh
 ```

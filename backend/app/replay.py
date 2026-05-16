@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import bisect
 import time
@@ -78,17 +78,15 @@ def replay_run(
             end = bisect.bisect_right(htf_times[htf], last_time)
             candles_by_tf[htf] = series[:end]
 
-        auto_levels, _selected, clusters, meta = compute_levels(
+        detected_levels, _selected, clusters, meta = compute_levels(
             candles_by_tf,
-            symbol_config.levels.cluster_tol_pct,
-            symbol_config.levels.max_levels,
             entry_tf=tf,
             htf_timeframe=symbol_config.levels.htf_timeframe,
             lookback=symbol_config.levels.lookback_window,
         )
-        tol_pct_used = meta.get("tol_pct_used", symbol_config.levels.cluster_tol_pct)
+        tol_pct_used = meta.get("tol_pct_used")
         overrides = symbol_config.levels.overrides
-        merged = apply_overrides(auto_levels, overrides.add, overrides.disable, tol_pct_used)
+        merged = apply_overrides(detected_levels, overrides.add, overrides.disable, tol_pct_used)
         final_levels = merged["final_levels"]
         final_levels_detailed = build_levels_detailed(
             final_levels,
@@ -583,3 +581,4 @@ def _empty_replay(symbol: str, tf: str, from_ms: int, to_ms: int, step: int) -> 
         "last_candle_time": None,
         "timestamp": int(time.time() * 1000),
     }
+

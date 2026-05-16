@@ -29,12 +29,27 @@ DOMAIN="$(read_env_value "DOMAIN")"
 
 BASE_URL="https://${DOMAIN}"
 
+curl_check() {
+  local url="$1"
+  local attempts="${2:-24}"
+  local delay="${3:-5}"
+  local n=1
+  until curl -fsS "${url}" >/dev/null; do
+    if [[ "${n}" -ge "${attempts}" ]]; then
+      echo "Health check failed: ${url}" >&2
+      return 1
+    fi
+    sleep "${delay}"
+    n=$((n + 1))
+  done
+}
+
 cd "${REPO_ROOT}"
 docker compose -f "${COMPOSE_FILE}" ps
 
-curl -fsS "${BASE_URL}/" >/dev/null
-curl -fsS "${BASE_URL}/api/healthz" >/dev/null
-curl -fsS "${BASE_URL}/api/readyz" >/dev/null
-curl -fsS "${BASE_URL}/api/forward_test/status" >/dev/null
+curl_check "${BASE_URL}/"
+curl_check "${BASE_URL}/api/healthz"
+curl_check "${BASE_URL}/api/readyz"
+curl_check "${BASE_URL}/api/auth/me"
 
 echo "Health checks passed for ${BASE_URL}"

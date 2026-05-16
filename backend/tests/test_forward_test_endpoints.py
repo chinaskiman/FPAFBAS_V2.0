@@ -1,4 +1,4 @@
-import json
+﻿import json
 
 from fastapi.testclient import TestClient
 
@@ -31,8 +31,6 @@ def _make_watchlist(path) -> None:
                 },
                 "levels": {
                     "auto": True,
-                    "max_levels": 6,
-                    "cluster_tol_pct": 0.05,
                     "overrides": {"add": [], "disable": []},
                 },
             }
