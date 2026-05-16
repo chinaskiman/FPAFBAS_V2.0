@@ -88,7 +88,8 @@ def _watchlist(tmp_path: Path, level: float, rules: dict | None = None, setups: 
                     "pullback_volume_filter": True,
                 },
                 "levels": {
-                    "auto": True,
+                    "htf_timeframe": "auto",
+                    "lookback_window": 14,
                     "overrides": {"add": [level], "disable": []},
                 },
             }

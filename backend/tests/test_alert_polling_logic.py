@@ -32,7 +32,8 @@ def test_alert_polling_dedup(tmp_path, monkeypatch) -> None:
                     "setup_candle": True,
                 },
                 "levels": {
-                    "auto": True,
+                    "htf_timeframe": "auto",
+                    "lookback_window": 14,
                     "overrides": {"add": [100.0], "disable": []},
                 },
             }

@@ -84,7 +84,8 @@ def _make_watchlist(pinned=None, rules=None) -> WatchlistConfig:
                         "setup_candle": True,
                     },
                     "levels": {
-                        "auto": True,
+                        "htf_timeframe": "auto",
+                        "lookback_window": 14,
                         "overrides": {"add": pinned or [], "disable": []},
                     },
                     "rules": rules or {

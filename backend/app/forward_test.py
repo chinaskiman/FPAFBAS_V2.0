@@ -319,6 +319,8 @@ class ForwardTestService:
         sl = _safe_float(alert.get("sl"))
         if not symbol or not tf or signal_time <= 0 or entry <= 0 or sl <= 0:
             return None
+        if (direction == "long" and entry <= sl) or (direction == "short" and entry >= sl):
+            return None
         risk_per_unit = abs(entry - sl)
         if risk_per_unit <= 0:
             return None
@@ -342,13 +344,7 @@ class ForwardTestService:
                 if existing:
                     return None
 
-            open_positions = conn.execute(
-                "SELECT COUNT(1) AS count FROM forward_test_positions WHERE status = 'open'"
-            ).fetchone()["count"]
-            if int(open_positions) >= int(run["max_positions"]):
-                return None
-
-            equity, _unrealized, margin_used, _open_count = self._compute_equity(conn, run)
+            equity, _unrealized, _margin_used, _open_count = self._compute_equity(conn, run)
             risk_amount = max(0.0, equity * float(run["risk_pct"]))
             qty = risk_amount / risk_per_unit if risk_per_unit > 0 else 0.0
             if qty <= 0:
@@ -357,8 +353,6 @@ class ForwardTestService:
             leverage = max(float(run["leverage"]), 1.0)
             margin_required = notional / leverage
             if margin_required <= 0:
-                return None
-            if margin_used + margin_required > equity:
                 return None
 
             sign = 1.0 if direction == "long" else -1.0
@@ -426,7 +420,7 @@ class ForwardTestService:
                 return
 
             for candle in new_candles:
-                self._process_pending_orders_for_candle(conn, run, symbol_upper, tf, candle)
+                self._process_pending_orders_for_candle(conn, symbol_upper, tf, candle)
                 self._process_open_positions_for_candle(conn, run, symbol_upper, tf, candle)
                 self._snapshot(conn, run, candle.close_time)
                 last_time = candle.close_time
@@ -625,7 +619,6 @@ class ForwardTestService:
     def _process_pending_orders_for_candle(
         self,
         conn: sqlite3.Connection,
-        run: sqlite3.Row,
         symbol: str,
         tf: str,
         candle,
@@ -648,102 +641,124 @@ class ForwardTestService:
             if candle.close_time <= signal_time:
                 continue
 
-            touched = (candle.low <= row["entry_price"] <= candle.high)
-            if touched:
-                current_run = conn.execute("SELECT * FROM forward_test_run WHERE id = 1").fetchone()
-                open_positions = conn.execute(
-                    "SELECT COUNT(1) AS count FROM forward_test_positions WHERE status = 'open'"
-                ).fetchone()["count"]
-                if int(open_positions) >= int(current_run["max_positions"]):
-                    updated_waited = int(row["candles_waited"]) + 1
-                    self._expire_or_keep_pending(conn, row["id"], updated_waited)
-                    continue
-
-                equity, _unrealized, margin_used, _open_count = self._compute_equity(conn, current_run)
-                if margin_used + float(row["margin_required"]) > equity:
-                    updated_waited = int(row["candles_waited"]) + 1
-                    self._expire_or_keep_pending(conn, row["id"], updated_waited)
-                    continue
-
-                fee_entry = float(row["notional"]) * float(current_run["fee_rate"])
-                conn.execute(
-                    "UPDATE forward_test_run SET cash_balance = cash_balance - ?, updated_at = ? WHERE id = 1",
-                    (fee_entry, now_ms),
-                )
-                entry_price = float(row["entry_price"])
-                leverage = float(row["leverage"])
-                liq_price = _compute_liquidation_price(entry_price, row["direction"], leverage)
-                liq_dist_entry = abs(entry_price - liq_price) / entry_price * 100.0 if entry_price > 0 else 0.0
-                conn.execute(
-                    """
-                    INSERT INTO forward_test_positions (
-                        order_id, symbol, tf, signal_type, direction, bias, regime, entry_time, entry_price,
-                        sl_price, tp_price, quantity, notional, margin_required, leverage, equity_at_entry,
-                        risk_amount, fee_entry, status, liquidation_price, liq_distance_entry_pct, liq_distance_min_pct,
-                        mark_price, last_mark_time, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        row["id"],
-                        row["symbol"],
-                        row["tf"],
-                        row["signal_type"],
-                        row["direction"],
-                        row["bias"],
-                        row["regime"],
-                        candle.close_time,
-                        entry_price,
-                        row["sl_price"],
-                        row["tp_price"],
-                        row["quantity"],
-                        row["notional"],
-                        row["margin_required"],
-                        row["leverage"],
-                        equity,
-                        row["risk_amount"],
-                        fee_entry,
-                        "open",
-                        liq_price,
-                        liq_dist_entry,
-                        liq_dist_entry,
-                        entry_price,
-                        candle.close_time,
-                        now_ms,
-                        now_ms,
-                    ),
-                )
-                conn.execute(
-                    """
-                    UPDATE forward_test_orders
-                    SET status = 'filled', filled_at = ?, filled_price = ?, status_reason = NULL
-                    WHERE id = ?
-                    """,
-                    (candle.close_time, entry_price, row["id"]),
-                )
+            updated_waited = int(row["candles_waited"]) + 1
+            if int(row["candles_waited"]) > 0:
+                self._cancel_pending_order(conn, row["id"], int(row["candles_waited"]), "missed_next_open")
                 continue
 
-            updated_waited = int(row["candles_waited"]) + 1
-            self._expire_or_keep_pending(conn, row["id"], updated_waited)
+            current_run = conn.execute("SELECT * FROM forward_test_run WHERE id = 1").fetchone()
+            entry_price = float(candle.open)
+            sl_price = float(row["sl_price"])
+            direction = row["direction"]
+            if (direction == "long" and entry_price <= sl_price) or (direction == "short" and entry_price >= sl_price):
+                self._cancel_pending_order(conn, row["id"], updated_waited, "invalid_stop_after_gap")
+                continue
 
-    def _expire_or_keep_pending(self, conn: sqlite3.Connection, order_id: int, candles_waited: int) -> None:
-        row = conn.execute(
-            "SELECT cancel_after_candles FROM forward_test_orders WHERE id = ?",
-            (order_id,),
-        ).fetchone()
-        cancel_after = int(row["cancel_after_candles"]) if row else DEFAULT_CANCEL_AFTER_CANDLES
-        if candles_waited >= cancel_after:
+            risk_per_unit = abs(entry_price - sl_price)
+            equity, _unrealized, margin_used, _open_count = self._compute_equity(conn, current_run)
+            risk_amount = max(0.0, equity * float(current_run["risk_pct"]))
+            qty = risk_amount / risk_per_unit if risk_per_unit > 0 else 0.0
+            leverage = max(float(current_run["leverage"]), 1.0)
+            notional = qty * entry_price
+            margin_required = notional / leverage if leverage > 0 else 0.0
+            if qty <= 0 or margin_required <= 0:
+                self._cancel_pending_order(conn, row["id"], updated_waited, "invalid_risk")
+                continue
+
+            open_positions = conn.execute(
+                "SELECT COUNT(1) AS count FROM forward_test_positions WHERE status = 'open'"
+            ).fetchone()["count"]
+            if int(open_positions) >= int(current_run["max_positions"]):
+                self._cancel_pending_order(conn, row["id"], updated_waited, "max_positions_at_next_open")
+                continue
+            if margin_used + margin_required > equity:
+                self._cancel_pending_order(conn, row["id"], updated_waited, "insufficient_margin_at_next_open")
+                continue
+
+            sign = 1.0 if direction == "long" else -1.0
+            tp_price = entry_price + sign * (risk_per_unit * float(current_run["tp_r"]))
+            fee_entry = notional * float(current_run["fee_rate"])
+            conn.execute(
+                "UPDATE forward_test_run SET cash_balance = cash_balance - ?, updated_at = ? WHERE id = 1",
+                (fee_entry, now_ms),
+            )
+            liq_price = _compute_liquidation_price(entry_price, direction, leverage)
+            liq_dist_entry = abs(entry_price - liq_price) / entry_price * 100.0 if entry_price > 0 else 0.0
+            conn.execute(
+                """
+                INSERT INTO forward_test_positions (
+                    order_id, symbol, tf, signal_type, direction, bias, regime, entry_time, entry_price,
+                    sl_price, tp_price, quantity, notional, margin_required, leverage, equity_at_entry,
+                    risk_amount, fee_entry, status, liquidation_price, liq_distance_entry_pct, liq_distance_min_pct,
+                    mark_price, last_mark_time, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row["symbol"],
+                    row["tf"],
+                    row["signal_type"],
+                    direction,
+                    row["bias"],
+                    row["regime"],
+                    candle.open_time,
+                    entry_price,
+                    sl_price,
+                    tp_price,
+                    qty,
+                    notional,
+                    margin_required,
+                    leverage,
+                    equity,
+                    risk_amount,
+                    fee_entry,
+                    "open",
+                    liq_price,
+                    liq_dist_entry,
+                    liq_dist_entry,
+                    entry_price,
+                    candle.open_time,
+                    now_ms,
+                    now_ms,
+                ),
+            )
             conn.execute(
                 """
                 UPDATE forward_test_orders
-                SET candles_waited = ?, status = 'cancelled', status_reason = 'expired'
+                SET entry_price = ?, tp_price = ?, risk_amount = ?, quantity = ?, notional = ?,
+                    margin_required = ?, leverage = ?, candles_waited = ?, status = 'filled',
+                    filled_at = ?, filled_price = ?, status_reason = NULL
                 WHERE id = ?
                 """,
-                (candles_waited, order_id),
+                (
+                    entry_price,
+                    tp_price,
+                    risk_amount,
+                    qty,
+                    notional,
+                    margin_required,
+                    leverage,
+                    updated_waited,
+                    candle.open_time,
+                    entry_price,
+                    row["id"],
+                ),
             )
-            return
+
+    def _cancel_pending_order(
+        self,
+        conn: sqlite3.Connection,
+        order_id: int,
+        candles_waited: int,
+        reason: str,
+    ) -> None:
         conn.execute(
-            "UPDATE forward_test_orders SET candles_waited = ? WHERE id = ?",
-            (candles_waited, order_id),
+            """
+            UPDATE forward_test_orders
+            SET candles_waited = ?, status = 'cancelled', status_reason = ?
+            WHERE id = ?
+            """,
+            (candles_waited, reason, order_id),
         )
 
     def _process_open_positions_for_candle(

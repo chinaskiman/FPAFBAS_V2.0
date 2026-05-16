@@ -27,7 +27,8 @@ def _base_watchlist():
                 "entry_tfs": ["15m", "1h"],
                 "setups": {"continuation": True, "retest": True, "fakeout": True, "setup_candle": True},
                 "levels": {
-                    "auto": True,
+                    "htf_timeframe": "auto",
+                    "lookback_window": 14,
                     "overrides": {"add": [], "disable": []},
                 },
             }
@@ -50,7 +51,8 @@ def test_watchlist_put_add_update_remove(monkeypatch, tmp_path):
                 "entry_tfs": ["15m", "4h"],
                 "setups": {"continuation": True, "retest": True, "fakeout": True, "setup_candle": True},
                 "levels": {
-                    "auto": True,
+                    "htf_timeframe": "auto",
+                    "lookback_window": 14,
                     "overrides": {"add": [], "disable": []},
                 },
             }
@@ -94,7 +96,8 @@ def test_watchlist_put_invalid_symbol(monkeypatch, tmp_path):
                 "entry_tfs": ["15m"],
                 "setups": {"continuation": True, "retest": True, "fakeout": True, "setup_candle": True},
                 "levels": {
-                    "auto": True,
+                    "htf_timeframe": "auto",
+                    "lookback_window": 14,
                     "overrides": {"add": [], "disable": []},
                 },
             }
@@ -120,7 +123,8 @@ def test_watchlist_put_triggers_ingest_sync(monkeypatch, tmp_path):
                 "entry_tfs": ["15m", "1h"],
                 "setups": {"continuation": True, "retest": True, "fakeout": True, "setup_candle": True},
                 "levels": {
-                    "auto": True,
+                    "htf_timeframe": "auto",
+                    "lookback_window": 14,
                     "overrides": {"add": [], "disable": []},
                 },
             }
@@ -132,7 +136,8 @@ def test_watchlist_put_triggers_ingest_sync(monkeypatch, tmp_path):
                 "entry_tfs": ["15m", "1h"],
                 "setups": {"continuation": True, "retest": True, "fakeout": True, "setup_candle": True},
                 "levels": {
-                    "auto": True,
+                    "htf_timeframe": "auto",
+                    "lookback_window": 14,
                     "overrides": {"add": [], "disable": []},
                 },
             }

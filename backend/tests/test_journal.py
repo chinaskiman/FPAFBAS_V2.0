@@ -32,7 +32,8 @@ def _make_watchlist() -> dict:
                 "entry_tfs": ["1h"],
                 "setups": {"continuation": True, "retest": True, "fakeout": True, "setup_candle": True},
                 "levels": {
-                    "auto": True,
+                    "htf_timeframe": "auto",
+                    "lookback_window": 14,
                     "overrides": {"add": [], "disable": []},
                 },
             }

@@ -166,8 +166,6 @@ def build_levels_detailed(
         match = _find_cluster_for_level(level, clusters, tol_pct_used)
         if match and match.get("role") in {"support", "resistance"}:
             role = match["role"]
-        elif last_close is not None and last_close > 0:
-            role = "support" if level < last_close else "resistance" if level > last_close else "mixed"
         else:
             role = "mixed"
         details.append(

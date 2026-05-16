@@ -22,7 +22,8 @@ def test_healthz_readyz(monkeypatch, tmp_path) -> None:
                             "setup_candle": True,
                         },
                         "levels": {
-                            "auto": True,
+                            "htf_timeframe": "auto",
+                            "lookback_window": 14,
                             "overrides": {"add": [], "disable": []},
                         },
                     }
