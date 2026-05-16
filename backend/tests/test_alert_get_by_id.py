@@ -19,7 +19,7 @@ def test_alert_get_by_id(tmp_path, monkeypatch) -> None:
         "entry": 101.0,
         "sl": 99.0,
         "sl_reason": "atr_stop",
-        "hwc_bias": "bullish",
+        "signal_tf_bias": "bullish",
         "payload": {"context": {"vol_ma5_slope_ok": True}},
     }
     inserted, row = insert_alert_if_new(alert)

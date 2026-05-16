@@ -101,7 +101,7 @@ def _watchlist(tmp_path: Path, level: float, rules: dict | None = None, setups: 
     return watchlist
 
 
-def test_hwc_neutral_does_not_suppress_signals(monkeypatch, tmp_path) -> None:
+def test_signal_tf_bias_does_not_suppress_signals(monkeypatch, tmp_path) -> None:
     level = 100.0
     watchlist = _watchlist(tmp_path, level)
     monkeypatch.setenv("WATCHLIST_PATH", str(tmp_path / "watchlist.json"))
@@ -125,11 +125,7 @@ def test_hwc_neutral_does_not_suppress_signals(monkeypatch, tmp_path) -> None:
     )
     config = WatchlistConfig.model_validate(watchlist)
     result = build_openings(ingest, config, "BTCUSDT", "15m", limit=10)
-    assert result["hwc_bias"] == "neutral"
-    assert result["mwc_bias"] == "neutral"
-    assert result["weekly_bias"] == "neutral"
-    assert result["daily_bias"] == "neutral"
-    assert result["four_hour_bias"] == "neutral"
+    assert "signal_tf_bias" not in result
     assert any(signal["type"] == "break" for signal in result["signals"])
 
 
@@ -197,11 +193,7 @@ def test_break_signal_strong_momentum(monkeypatch, tmp_path) -> None:
     assert signal["sl_reason"] == "atr_stop"
     assert signal["candle"]["close"] == signal["entry"]
     assert signal["level_event"]["break_index"] is not None
-    assert signal["context"]["hwc_bias"] == "bullish"
-    assert signal["context"]["mwc_bias"] == "bullish"
-    assert signal["context"]["weekly_bias"] == "bullish"
-    assert signal["context"]["daily_bias"] == "bullish"
-    assert signal["context"]["four_hour_bias"] == "bullish"
+    assert signal["context"]["signal_tf_bias"] in {"bullish", "bearish", "neutral"}
 
 
 def test_break_suppressed_when_no_momentum(monkeypatch, tmp_path) -> None:

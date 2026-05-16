@@ -270,11 +270,7 @@ def test_replay_performance_report_groups_outcomes_and_quality() -> None:
                         "entry": 100.0,
                         "sl": 95.0,
                         "context": {
-                            "weekly_bias": "bullish",
-                            "daily_bias": "bullish",
-                            "four_hour_bias": "bullish",
-                            "hwc_bias": "bullish",
-                            "mwc_bias": "bullish",
+                            "signal_tf_bias": "bullish",
                             "volume_spike_ok": True,
                             "pullback_vol_decline": True,
                             "not_at_peak_long": True,
@@ -296,7 +292,7 @@ def test_replay_performance_report_groups_outcomes_and_quality() -> None:
     assert report["win_rate"] == 1.0
     assert report["realized_r_total"] == 2.0
     assert report["trade_rows"][0]["quality_grade"] == "A"
-    assert report["trade_rows"][0]["bias_alignment_count"] == 5
+    assert report["trade_rows"][0]["signal_tf_bias"] == "bullish"
     by_type = {item["key"]: item for item in report["groups"]["by_type"]}
     assert by_type["retest"]["wins"] == 1
     by_quality = {item["key"]: item for item in report["groups"]["by_quality"]}
@@ -320,11 +316,7 @@ def test_replay_summary_api_uses_full_timeline_for_performance(monkeypatch) -> N
                         "entry": 100.0,
                         "sl": 95.0,
                         "context": {
-                            "weekly_bias": "bullish",
-                            "daily_bias": "bullish",
-                            "four_hour_bias": "bullish",
-                            "hwc_bias": "bullish",
-                            "mwc_bias": "bullish",
+                            "signal_tf_bias": "bullish",
                             "volume_spike_ok": True,
                             "pullback_vol_decline": True,
                             "not_at_peak_long": True,

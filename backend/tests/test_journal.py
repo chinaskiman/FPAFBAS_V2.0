@@ -110,7 +110,7 @@ def test_journal_insert_and_candles(monkeypatch, tmp_path):
         "entry": 125.0,
         "sl": 120.0,
         "sl_reason": "atr_stop",
-        "hwc_bias": "bullish",
+        "signal_tf_bias": "bullish",
     }
 
     poller = AlertPoller(ingest=ingest, notifier=notifier, journal=journal)

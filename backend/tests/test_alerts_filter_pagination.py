@@ -17,7 +17,7 @@ def _make_alert(symbol: str, alert_type: str, direction: str, level: float, time
         "entry": level + 1,
         "sl": level - 1,
         "sl_reason": "atr_stop",
-        "hwc_bias": "bullish",
+        "signal_tf_bias": "bullish",
         "payload": {"type": alert_type, "context": {"vol_ma5_slope_ok": True}},
     }
 

@@ -103,11 +103,10 @@ CORS_ORIGINS=http://localhost,http://127.0.0.1
 - Candle caches feed indicators, candle-pattern S/R levels, and signal detection.
 - S/R detection uses confirmed HTF candles only: 1h entries use Daily levels, and 15m entries use 4H levels.
 - The S/R algorithm scans the latest completed HTF candles for bullish->bearish resistance and bearish->bullish support patterns. It uses only candle opens, closes, and color.
-- HWC and MWC are context/analytics only; they do not suppress or filter entries.
 - DI peak uses Option 1 from the PRD: DI pivot highs are clustered into peak zones and current DI is checked within 3% proximity.
 - Setup candle detection requires SMA7/25/99, directional wick >= 1.5x body, and SMA7 behind the candle body.
 - Alerts are persisted to SQLite and de-duplicated before notifying Telegram.
-- Replay mode runs the same pipeline candle-by-candle without lookahead and reports performance by setup, direction, HWC/MWC context, and quality grade.
+- Replay mode runs the same pipeline candle-by-candle without lookahead and reports performance by setup, direction, signal timeframe bias, and quality grade.
 
 ## Key Endpoints
 
@@ -127,7 +126,6 @@ Signals & filters:
 - `GET /api/di_peak/{symbol}/{tf}`
 - `GET /api/volume/{symbol}/{tf}`
 - `GET /api/rsi/{symbol}/{tf}`
-- `GET /api/hwc/{symbol}`
 
 Operator:
 - `GET /api/poller/status` (requires `Authorization: Bearer <ADMIN_TOKEN>`)

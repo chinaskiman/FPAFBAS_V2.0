@@ -32,7 +32,6 @@ from .di_peak import (
     DI_PEAK_WINDOW_DEFAULT,
     compute_di_peak_flags,
 )
-from .hwc import compute_hwc_bias, compute_mwc_bias
 from .volume_filters import compute_pullback_vol_decline, compute_vol_metrics
 from .rsi_filters import atr_multiplier_from_rsi, rsi_distance_from_50
 from .level_events import detect_level_events
@@ -381,7 +380,7 @@ def api_alerts_export(
             "entry",
             "sl",
             "sl_reason",
-            "hwc_bias",
+            "signal_tf_bias",
             "notified",
             "notify_error",
             "score",
@@ -411,7 +410,7 @@ def api_alerts_export(
                 item.get("entry"),
                 item.get("sl"),
                 item.get("sl_reason"),
-                item.get("hwc_bias"),
+                item.get("signal_tf_bias"),
                 item.get("notified"),
                 item.get("notify_error"),
                 score,
@@ -1040,22 +1039,6 @@ def api_debug_levels(symbol: str, entry_tf: str = "15m") -> dict:
     }
 
 
-@app.get("/api/hwc/{symbol}")
-def api_hwc(symbol: str) -> dict:
-    ingest = getattr(app.state, "ingest", None)
-    if ingest is None:
-        raise HTTPException(status_code=503, detail="Ingestion not initialized")
-    weekly_cache = ingest.get_cache(symbol, "1w")
-    daily_cache = ingest.get_cache(symbol, "1d")
-    four_hour_cache = ingest.get_cache(symbol, "4h")
-    if weekly_cache is None or daily_cache is None:
-        raise HTTPException(status_code=404, detail="Missing weekly or daily cache")
-    hwc = compute_hwc_bias(weekly_cache.list_all(), daily_cache.list_all())
-    four_hour = four_hour_cache.list_all() if four_hour_cache else []
-    mwc = compute_mwc_bias(daily_cache.list_all(), four_hour)
-    return {"symbol": symbol.upper(), **hwc, **mwc}
-
-
 @app.get("/api/di_peak/{symbol}/{tf}")
 def api_di_peak(
     symbol: str,
@@ -1240,33 +1223,6 @@ def api_level_events(
         "events": events,
         "timestamp": timestamp,
     }
-
-
-@app.get("/api/debug/swings/{symbol}/{tf}")
-def api_debug_swings(symbol: str, tf: str, limit: int = 500) -> dict:
-    ingest = getattr(app.state, "ingest", None)
-    if ingest is None:
-        raise HTTPException(status_code=503, detail="Ingestion not initialized")
-    cache = ingest.get_cache(symbol, tf)
-    if cache is None:
-        raise HTTPException(status_code=404, detail="Symbol or timeframe not tracked")
-    candles = cache.list_recent(limit)
-    highs = [candle.high for candle in candles]
-    lows = [candle.low for candle in candles]
-    times = [candle.close_time for candle in candles]
-    pivot_high = find_pivot_highs(highs, 2, 2)
-    pivot_low = find_pivot_lows(lows, 2, 2)
-    high_points = [
-        {"index": idx, "time": times[idx], "price": highs[idx]}
-        for idx, flag in enumerate(pivot_high)
-        if flag
-    ]
-    low_points = [
-        {"index": idx, "time": times[idx], "price": lows[idx]}
-        for idx, flag in enumerate(pivot_low)
-        if flag
-    ]
-    return {"symbol": symbol.upper(), "tf": tf, "highs": high_points, "lows": low_points}
 
 
 @app.get("/api/setup_candles/{symbol}/{tf}")

@@ -18,7 +18,7 @@ def test_insert_alert_dedup(tmp_path, monkeypatch) -> None:
         "entry": 101.0,
         "sl": 99.0,
         "sl_reason": "atr_stop",
-        "hwc_bias": "bullish",
+        "signal_tf_bias": "bullish",
         "payload": {"foo": "bar"},
     }
     inserted, row = insert_alert_if_new(alert)
@@ -51,7 +51,7 @@ def test_exists_alert(tmp_path, monkeypatch) -> None:
         "entry": 101.0,
         "sl": 99.0,
         "sl_reason": "atr_stop",
-        "hwc_bias": "bullish",
+        "signal_tf_bias": "bullish",
         "payload": {"foo": "bar"},
     }
     inserted, _ = insert_alert_if_new(alert)

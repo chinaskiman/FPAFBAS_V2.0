@@ -1,13 +1,13 @@
 ﻿from __future__ import annotations
 
 from .di_peak import DI_PEAK_WINDOW_DEFAULT, compute_di_peak_flags
-from .hwc import compute_hwc_bias, compute_mwc_bias
 from .indicators import sma
 from .level_events import detect_level_events
 from .levels import HTF_TFS, apply_overrides, build_levels_detailed, compute_levels, level_roles_from_details
 from .rsi_filters import atr_multiplier_from_rsi, rsi_distance_from_50
 from .signal_builder import build_signals_from_state
 from .setup_candles import detect_setup_candles
+from .timeframe_bias import compute_signal_timeframe_bias
 from .volume_filters import compute_pullback_vol_decline, compute_vol_metrics
 
 
@@ -19,32 +19,14 @@ def build_openings(ingest, config, symbol: str, tf: str, limit: int = 300) -> di
     candles = cache.list_recent(limit)
     last_candle_time = candles[-1].close_time if candles else None
 
-    weekly_cache = ingest.get_cache(symbol_upper, "1w")
-    daily_cache = ingest.get_cache(symbol_upper, "1d")
-    four_hour_cache = ingest.get_cache(symbol_upper, "4h")
-    weekly = weekly_cache.list_all() if weekly_cache else []
-    daily = daily_cache.list_all() if daily_cache else []
-    four_hour = four_hour_cache.list_all() if four_hour_cache else []
-    hwc = compute_hwc_bias(weekly, daily)
-    mwc = compute_mwc_bias(daily, four_hour)
-    hwc_bias = hwc["hwc_bias"]
-    weekly_bias = hwc.get("weekly", {}).get("bias")
-    daily_bias = hwc.get("daily", {}).get("bias")
-    four_hour_bias = mwc.get("four_hour", {}).get("bias")
-    mwc_bias = mwc["mwc_bias"]
-
     if not candles:
         return {
             "symbol": symbol_upper,
             "tf": tf,
-            "hwc_bias": hwc_bias,
-            "mwc_bias": mwc_bias,
-            "weekly_bias": weekly_bias,
-            "daily_bias": daily_bias,
-            "four_hour_bias": four_hour_bias,
             "last_candle_time": None,
             "signals": [],
         }
+    signal_tf_bias = compute_signal_timeframe_bias(candles)
 
     indicator_data = ingest.list_indicators(symbol_upper, tf, limit=len(candles))
     rsi_series = indicator_data.get("rsi14", [])
@@ -101,12 +83,7 @@ def build_openings(ingest, config, symbol: str, tf: str, limit: int = 300) -> di
         "rsi_distance": rsi_distance,
         "atr_mult": atr_mult,
         "atr_stop_distance": atr_stop_distance,
-        "hwc_bias": hwc_bias,
-        "mwc_bias": mwc_bias,
-        "weekly_bias": weekly_bias,
-        "daily_bias": daily_bias,
-        "four_hour_bias": four_hour_bias,
-        "mwc": mwc,
+        "signal_tf_bias": signal_tf_bias,
         "rules": rules,
         "setups": setups,
     }
@@ -160,12 +137,6 @@ def build_openings(ingest, config, symbol: str, tf: str, limit: int = 300) -> di
     return {
         "symbol": symbol_upper,
         "tf": tf,
-        "hwc_bias": hwc_bias,
-        "mwc_bias": mwc_bias,
-        "weekly_bias": weekly_bias,
-        "daily_bias": daily_bias,
-        "four_hour_bias": four_hour_bias,
-        "mwc": mwc,
         "last_candle_time": last_candle_time,
         "signals": signals,
     }

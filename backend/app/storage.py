@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     entry REAL,
     sl REAL,
     sl_reason TEXT,
-    hwc_bias TEXT,
+    signal_tf_bias TEXT,
     payload_json TEXT,
     notified INTEGER NOT NULL DEFAULT 0,
     notify_error TEXT
@@ -81,7 +81,7 @@ def _migrate_alerts(conn: sqlite3.Connection) -> None:
         ("entry", "REAL"),
         ("sl", "REAL"),
         ("sl_reason", "TEXT"),
-        ("hwc_bias", "TEXT"),
+        ("signal_tf_bias", "TEXT"),
         ("payload_json", "TEXT"),
         ("notified", "INTEGER"),
         ("notify_error", "TEXT"),
@@ -102,7 +102,7 @@ def insert_alert_if_new(alert: dict) -> Tuple[bool, Optional[dict]]:
         payload_json = json.dumps(alert.get("payload")) if alert.get("payload") is not None else None
         cur = conn.execute(
             "INSERT OR IGNORE INTO alerts "
-            "(created_at, symbol, tf, type, direction, level, time, entry, sl, sl_reason, hwc_bias, payload_json, notified, notify_error) "
+            "(created_at, symbol, tf, type, direction, level, time, entry, sl, sl_reason, signal_tf_bias, payload_json, notified, notify_error) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 created_at,
@@ -115,7 +115,7 @@ def insert_alert_if_new(alert: dict) -> Tuple[bool, Optional[dict]]:
                 alert.get("entry"),
                 alert.get("sl"),
                 alert.get("sl_reason"),
-                alert.get("hwc_bias"),
+                alert.get("signal_tf_bias"),
                 payload_json,
                 0,
                 None,

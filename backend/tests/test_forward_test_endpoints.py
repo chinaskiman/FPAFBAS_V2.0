@@ -104,7 +104,7 @@ def test_forward_test_registers_and_closes_trade(tmp_path, monkeypatch) -> None:
             "time": 59_999,
             "entry": 100.0,
             "sl": 99.0,
-            "hwc_bias": "bullish",
+            "signal_tf_bias": "bullish",
         }
         created = service.register_signal(signal)
         assert created is not None
@@ -141,7 +141,7 @@ def test_forward_test_fills_signal_at_next_candle_open(tmp_path, monkeypatch) ->
                 "time": 59_999,
                 "entry": 100.0,
                 "sl": 99.0,
-                "hwc_bias": "bullish",
+                "signal_tf_bias": "bullish",
             }
         )
         assert created is not None
@@ -193,7 +193,7 @@ def test_forward_test_cancels_next_open_gap_through_stop(tmp_path, monkeypatch) 
                 "time": 59_999,
                 "entry": 100.0,
                 "sl": 99.0,
-                "hwc_bias": "bullish",
+                "signal_tf_bias": "bullish",
             }
         )
         assert created is not None
@@ -240,7 +240,7 @@ def test_forward_test_cancels_stale_pending_order_after_next_open_was_missed(tmp
                 "time": 59_999,
                 "entry": 100.0,
                 "sl": 99.0,
-                "hwc_bias": "bullish",
+                "signal_tf_bias": "bullish",
             }
         )
         assert created is not None

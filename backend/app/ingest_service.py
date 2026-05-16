@@ -12,7 +12,6 @@ import websocket
 from .binance_client import DEFAULT_WS_BASE, BinanceRestClient
 from .candle_cache import Candle, CandleCache
 from .derived_cache import DerivedSeries
-from .hwc import compute_timeframe_bias
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,6 @@ class IngestService:
         self.journal = journal_store
         self.caches: Dict[Tuple[str, str], CandleCache] = {}
         self.derived: Dict[Tuple[str, str], DerivedSeries] = {}
-        self.biases: Dict[Tuple[str, str], dict] = {}
         self.tracked: Dict[str, List[str]] = {}
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
@@ -187,19 +185,6 @@ class IngestService:
             filtered = filtered[-limit:]
         return filtered
 
-    def get_bias(self, symbol: str, tf: str) -> dict | None:
-        with self._lock:
-            bias = self.biases.get((symbol.upper(), tf))
-        if bias is not None:
-            return bias
-        cache = self.get_cache(symbol, tf)
-        if cache is None:
-            return None
-        bias = compute_timeframe_bias(cache.list_all())
-        with self._lock:
-            self.biases[(symbol.upper(), tf)] = bias
-        return bias
-
     def list_symbols(self) -> List[dict]:
         with self._lock:
             items = sorted(self.tracked.items())
@@ -219,8 +204,6 @@ class IngestService:
                 self.tracked.setdefault(symbol, list(BOOTSTRAP_TFS))
         cache.append_if_new(candle)
         self._recompute(symbol, tf, cache)
-        if tf in ("1w", "1d"):
-            self._recompute_bias(symbol, tf, cache)
         if self.journal is not None:
             try:
                 self.journal.fill_entry_from_candle(symbol, tf, candle)
@@ -239,8 +222,6 @@ class IngestService:
             with self._lock:
                 self.caches[(symbol, tf)] = cache
             self._recompute(symbol, tf, cache)
-            if tf in ("1w", "1d"):
-                self._recompute_bias(symbol, tf, cache)
 
     def _drop_symbol(self, symbol: str) -> None:
         symbol_upper = symbol.upper()
@@ -250,8 +231,6 @@ class IngestService:
                 self.caches.pop(key, None)
             for key in [key for key in self.derived if key[0] == symbol_upper]:
                 self.derived.pop(key, None)
-            for key in [key for key in self.biases if key[0] == symbol_upper]:
-                self.biases.pop(key, None)
 
     def _run_ws(self, symbols: List[str]) -> None:
         streams = [f"{symbol.lower()}@kline_{tf}" for symbol in symbols for tf in self.stream_tfs]
@@ -324,8 +303,3 @@ class IngestService:
         derived = DerivedSeries.recompute(candles)
         with self._lock:
             self.derived[(symbol.upper(), tf)] = derived
-
-    def _recompute_bias(self, symbol: str, tf: str, cache: CandleCache) -> None:
-        bias = compute_timeframe_bias(cache.list_all())
-        with self._lock:
-            self.biases[(symbol.upper(), tf)] = bias

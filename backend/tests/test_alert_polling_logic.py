@@ -51,7 +51,7 @@ def test_alert_polling_dedup(tmp_path, monkeypatch) -> None:
         return {
             "symbol": "BTCUSDT",
             "tf": "15m",
-            "hwc_bias": "bullish",
+            "signal_tf_bias": "bullish",
             "last_candle_time": 1700000000000,
             "signals": [
                 {

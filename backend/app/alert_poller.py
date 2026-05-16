@@ -360,8 +360,7 @@ def _signal_to_alert(openings: dict, signal: dict) -> dict:
         "entry": signal.get("entry"),
         "sl": signal.get("sl"),
         "sl_reason": signal.get("sl_reason"),
-        "hwc_bias": openings.get("hwc_bias"),
-        "mwc_bias": openings.get("mwc_bias"),
+        "signal_tf_bias": (signal.get("context") or {}).get("signal_tf_bias"),
         "context": signal.get("context"),
         "payload": signal,
     }

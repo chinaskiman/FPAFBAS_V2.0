@@ -103,8 +103,6 @@ export default function DashboardPage({ view = "dashboard" }) {
   const [levelsEntryTf, setLevelsEntryTf] = useState("15m");
   const [pinnedInput, setPinnedInput] = useState("");
   const [disabledInput, setDisabledInput] = useState("");
-  const [bias, setBias] = useState(null);
-  const [biasError, setBiasError] = useState("");
   const [diPeak, setDiPeak] = useState(null);
   const [diPeakError, setDiPeakError] = useState("");
   const [diTf, setDiTf] = useState("15m");
@@ -144,7 +142,6 @@ export default function DashboardPage({ view = "dashboard" }) {
   const [showLevelEvents, setShowLevelEvents] = useState(true);
   const [showSetupCandles, setShowSetupCandles] = useState(true);
   const [showOpenings, setShowOpenings] = useState(true);
-  const [showHwcBadge, setShowHwcBadge] = useState(false);
   const [showDiWidget, setShowDiWidget] = useState(true);
   const [showRsiWidget, setShowRsiWidget] = useState(false);
   const [showVolumeWidget, setShowVolumeWidget] = useState(true);
@@ -169,7 +166,6 @@ export default function DashboardPage({ view = "dashboard" }) {
   const [replayIndex, setReplayIndex] = useState(0);
   const [replayDetails, setReplayDetails] = useState(null);
   const [replaySideFilter, setReplaySideFilter] = useState("all");
-  const [replayBiasAlignmentFilter, setReplayBiasAlignmentFilter] = useState("all");
   const [replayOutcomeFilter, setReplayOutcomeFilter] = useState("all");
   const [replaySortBy, setReplaySortBy] = useState("time_desc");
   const [pollerStatus, setPollerStatus] = useState(null);
@@ -503,22 +499,6 @@ export default function DashboardPage({ view = "dashboard" }) {
     };
     loadLevels();
   }, [selectedSymbol, levelsEntryTf]);
-
-  useEffect(() => {
-    const loadBias = async () => {
-      if (!selectedSymbol) {
-        return;
-      }
-      try {
-        const data = await fetchJson(`/api/hwc/${selectedSymbol}`);
-        setBias(data);
-        setBiasError("");
-      } catch (err) {
-        setBiasError(err instanceof Error ? err.message : "Unknown error");
-      }
-    };
-    loadBias();
-  }, [selectedSymbol]);
 
   useEffect(() => {
     const loadDiPeak = async () => {
@@ -1322,14 +1302,6 @@ export default function DashboardPage({ view = "dashboard" }) {
     if (replayOutcomeFilter !== "all") {
       rows = rows.filter((item) => item.outcome === replayOutcomeFilter);
     }
-    if (replayBiasAlignmentFilter === "aligned_5") {
-      rows = rows.filter((item) => item.bias_alignment_count === 5);
-    } else if (replayBiasAlignmentFilter === "aligned_4") {
-      rows = rows.filter((item) => item.bias_alignment_count === 4);
-    } else if (replayBiasAlignmentFilter === "aligned_0_3") {
-      rows = rows.filter((item) => item.bias_alignment_count <= 3);
-    }
-
     rows.sort((a, b) => {
       if (replaySortBy === "time_asc") {
         return a.signal_time - b.signal_time;
@@ -1346,9 +1318,6 @@ export default function DashboardPage({ view = "dashboard" }) {
       if (replaySortBy === "duration_rr2_asc") {
         return compareNullableNumber(a.time_to_rr2_ms, b.time_to_rr2_ms);
       }
-      if (replaySortBy === "alignment_desc") {
-        return b.bias_alignment_count - a.bias_alignment_count || b.signal_time - a.signal_time;
-      }
       if (replaySortBy === "direction") {
         const rank = { long: 0, short: 1 };
         return (rank[a.direction] ?? 9) - (rank[b.direction] ?? 9) || b.signal_time - a.signal_time;
@@ -1356,7 +1325,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       return b.signal_time - a.signal_time;
     });
     return rows;
-  }, [replayTradeOutcomes, replaySideFilter, replayOutcomeFilter, replayBiasAlignmentFilter, replaySortBy]);
+  }, [replayTradeOutcomes, replaySideFilter, replayOutcomeFilter, replaySortBy]);
   const replayTradeStats = useMemo(() => summarizeReplayOutcomes(replayTradeRows), [replayTradeRows]);
   const replayTradeStatsByTf = useMemo(
     () =>
@@ -1781,10 +1750,6 @@ export default function DashboardPage({ view = "dashboard" }) {
             <span>Openings</span>
           </label>
           <label className="checkbox">
-            <input type="checkbox" checked={showHwcBadge} onChange={(event) => setShowHwcBadge(event.target.checked)} />
-            <span>Bias Context</span>
-          </label>
-          <label className="checkbox">
             <input type="checkbox" checked={showDiWidget} onChange={(event) => setShowDiWidget(event.target.checked)} />
             <span>DI / ADX</span>
           </label>
@@ -1818,18 +1783,8 @@ export default function DashboardPage({ view = "dashboard" }) {
           </div>
         ) : null}
 
-        {(showHwcBadge || showDiWidget || showRsiWidget || showVolumeWidget) ? (
+        {(showDiWidget || showRsiWidget || showVolumeWidget) ? (
           <div className="di-grid">
-            {showHwcBadge ? (
-              <div>
-                <span>Bias Context</span>
-                <strong className={`bias-${bias?.hwc_bias ?? "neutral"}`}>{bias?.hwc_bias ?? "-"}</strong>
-                <small>
-                  Weekly: {bias?.weekly?.bias ?? "-"} / Daily: {bias?.daily?.bias ?? "-"} / 4H:{" "}
-                  {bias?.four_hour?.bias ?? "-"} / MWC: {bias?.mwc_bias ?? "-"} / not a filter
-                </small>
-              </div>
-            ) : null}
             {showDiWidget ? (
               <div>
                 <span>DI / ADX</span>
@@ -2237,18 +2192,6 @@ export default function DashboardPage({ view = "dashboard" }) {
                 </select>
               </label>
               <label className="field">
-                <span>Bias Alignment</span>
-                <select
-                  value={replayBiasAlignmentFilter}
-                  onChange={(event) => setReplayBiasAlignmentFilter(event.target.value)}
-                >
-                  <option value="all">All</option>
-                  <option value="aligned_5">5/5 aligned</option>
-                  <option value="aligned_4">4/5 aligned</option>
-                  <option value="aligned_0_3">0-3/5 aligned</option>
-                </select>
-              </label>
-              <label className="field">
                 <span>Outcome</span>
                 <select value={replayOutcomeFilter} onChange={(event) => setReplayOutcomeFilter(event.target.value)}>
                   <option value="all">All</option>
@@ -2265,7 +2208,6 @@ export default function DashboardPage({ view = "dashboard" }) {
                   <option value="max_rr_desc">Max RR (high to low)</option>
                   <option value="max_dd_desc">Max drawdown R (high to low)</option>
                   <option value="duration_rr2_asc">Time to RR2 (fast to slow)</option>
-                  <option value="alignment_desc">Bias alignment (high to low)</option>
                   <option value="direction">Direction (long then short)</option>
                 </select>
               </label>
@@ -2355,8 +2297,7 @@ export default function DashboardPage({ view = "dashboard" }) {
                     <th>Direction</th>
                     <th>Entry</th>
                     <th>SL</th>
-                    <th>Biases (W / D / H)</th>
-                    <th>Alignment</th>
+                    <th>Signal TF Bias</th>
                     <th>Outcome</th>
                     <th>Max RR</th>
                     <th>Max DD (R)</th>
@@ -2370,7 +2311,7 @@ export default function DashboardPage({ view = "dashboard" }) {
                 <tbody>
                   {replayTradeRows.length === 0 ? (
                     <tr>
-                      <td colSpan={16} className="muted">
+                      <td colSpan={15} className="muted">
                         No replay trades match filters.
                       </td>
                     </tr>
@@ -2383,11 +2324,7 @@ export default function DashboardPage({ view = "dashboard" }) {
                         <td>{trade.direction}</td>
                         <td>{formatNumber(trade.entry)}</td>
                         <td>{formatNumber(trade.sl)}</td>
-                        <td>
-                          {trade.weekly_bias} / {trade.daily_bias} / {trade.four_hour_bias} / {trade.hwc_bias} /{" "}
-                          {trade.mwc_bias}
-                        </td>
-                        <td>{trade.bias_alignment_label}</td>
+                        <td>{trade.signal_tf_bias ?? "-"}</td>
                         <td>{trade.outcome}</td>
                         <td>{formatNumber(trade.max_rr)}</td>
                         <td>{formatNumber(trade.max_drawdown_r)}</td>
@@ -3194,40 +3131,6 @@ export default function DashboardPage({ view = "dashboard" }) {
 
       {showDashboard ? (
       <section className="card">
-        <h2>Bias Context</h2>
-        <p className="muted">HWC and MWC are shown for analysis only. They do not filter entries.</p>
-        {biasError ? <div className="error">{biasError}</div> : null}
-        {bias ? (
-          <div className="bias-grid">
-            <div>
-              <span>HWC Context</span>
-              <strong className={`bias-${bias.hwc_bias}`}>{bias.hwc_bias}</strong>
-            </div>
-            <div>
-              <span>MWC Context</span>
-              <strong className={`bias-${bias.mwc_bias}`}>{bias.mwc_bias}</strong>
-            </div>
-            <div>
-              <span>Weekly</span>
-              <strong className={`bias-${bias.weekly.bias}`}>{bias.weekly.bias}</strong>
-            </div>
-            <div>
-              <span>Daily</span>
-              <strong className={`bias-${bias.daily.bias}`}>{bias.daily.bias}</strong>
-            </div>
-            <div>
-              <span>4H</span>
-              <strong className={`bias-${bias.four_hour?.bias ?? "neutral"}`}>{bias.four_hour?.bias ?? "-"}</strong>
-            </div>
-          </div>
-        ) : (
-          <p className="muted">Loading bias...</p>
-        )}
-      </section>
-      ) : null}
-
-      {showDashboard ? (
-      <section className="card">
         <h2>DI Peak</h2>
         {diPeakError ? <div className="error">{diPeakError}</div> : null}
         <div className="di-controls">
@@ -3548,14 +3451,6 @@ export default function DashboardPage({ view = "dashboard" }) {
           <div>
             <div className="bias-grid">
               <div>
-                <span>HWC Context</span>
-                <strong className={`bias-${openings.hwc_bias}`}>{openings.hwc_bias}</strong>
-              </div>
-              <div>
-                <span>MWC Context</span>
-                <strong className={`bias-${openings.mwc_bias}`}>{openings.mwc_bias}</strong>
-              </div>
-              <div>
                 <span>Last Candle</span>
                 <strong>{openings.last_candle_time ? new Date(openings.last_candle_time).toLocaleString() : "-"}</strong>
               </div>
@@ -3728,43 +3623,6 @@ function compareNullableNumber(a, b) {
 function toFiniteNumber(value) {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
-}
-
-function expectedBiasForDirection(direction) {
-  if (direction === "long") {
-    return "bullish";
-  }
-  if (direction === "short") {
-    return "bearish";
-  }
-  return null;
-}
-
-function getBiasAlignment(direction, context) {
-  const expected = expectedBiasForDirection(direction);
-  const weekly = String(context?.weekly_bias || "neutral").toLowerCase();
-  const daily = String(context?.daily_bias || "neutral").toLowerCase();
-  const fourHour = String(context?.four_hour_bias || "neutral").toLowerCase();
-  const hwc = String(context?.hwc_bias || "neutral").toLowerCase();
-  const mwc = String(context?.mwc_bias || "neutral").toLowerCase();
-  const values = [weekly, daily, fourHour, hwc, mwc];
-  let aligned = 0;
-  if (expected) {
-    values.forEach((value) => {
-      if (value === expected) {
-        aligned += 1;
-      }
-    });
-  }
-  return {
-    aligned_count: aligned,
-    label: `${aligned}/5 aligned`,
-    weekly_bias: weekly,
-    daily_bias: daily,
-    four_hour_bias: fourHour,
-    hwc_bias: hwc,
-    mwc_bias: mwc,
-  };
 }
 
 function evaluateReplaySignalOutcome(signal, candles) {
@@ -3969,7 +3827,6 @@ function buildReplayTradeOutcomes(items, symbol, tf) {
         return;
       }
 
-      const alignment = getBiasAlignment(direction, signal?.context || {});
       const outcome = evaluateReplaySignalOutcome(
         {
           direction,
@@ -3993,13 +3850,7 @@ function buildReplayTradeOutcomes(items, symbol, tf) {
         entry,
         sl,
         risk,
-        weekly_bias: alignment.weekly_bias,
-        daily_bias: alignment.daily_bias,
-        four_hour_bias: alignment.four_hour_bias,
-        hwc_bias: alignment.hwc_bias,
-        mwc_bias: alignment.mwc_bias,
-        bias_alignment_count: alignment.aligned_count,
-        bias_alignment_label: alignment.label,
+        signal_tf_bias: String(signal?.context?.signal_tf_bias || "neutral").toLowerCase(),
         ...outcome,
       });
     });
@@ -4103,11 +3954,7 @@ function formatTelegramText(alert) {
   const sl = toFiniteNumber(alert.sl ?? payload.sl);
   const slReason = String(alert.sl_reason ?? payload.sl_reason ?? "-");
   const time = alert.time ?? payload.time;
-  const weeklyBias = String(context.weekly_bias ?? alert.weekly_bias ?? payload.weekly_bias ?? "-");
-  const dailyBias = String(context.daily_bias ?? alert.daily_bias ?? payload.daily_bias ?? "-");
-  const fourHourBias = String(context.four_hour_bias ?? alert.four_hour_bias ?? payload.four_hour_bias ?? "-");
-  const hwcBias = String(context.hwc_bias ?? alert.hwc_bias ?? payload.hwc_bias ?? "-");
-  const mwcBias = String(context.mwc_bias ?? alert.mwc_bias ?? payload.mwc_bias ?? "-");
+  const signalTfBias = String(context.signal_tf_bias ?? alert.signal_tf_bias ?? payload.signal_tf_bias ?? "-");
 
   const volOk = context.volume_spike_ok ?? context.vol_ma5_slope_ok;
   const pullbackVol = context.pullback_vol_decline;
@@ -4153,9 +4000,7 @@ function formatTelegramText(alert) {
   } else {
     parts.push("Risk (1R): - | TP@2R: -");
   }
-  parts.push(
-    `Bias context (not a filter): W ${weeklyBias} | D ${dailyBias} | 4H ${fourHourBias} | HWC ${hwcBias} | MWC ${mwcBias}`
-  );
+  parts.push(`Signal TF bias: ${signalTfBias}`);
   parts.push(
     `Checks: VOL_OK=${formatTelegramBool(volOk)} | DI_OK=${formatTelegramBool(diOk)} | PULLBACK_VOL=${formatTelegramBool(pullbackVol)}`
   );

@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 
 from .candle_cache import Candle
 from .di_peak import DI_PEAK_WINDOW_DEFAULT, compute_di_peak_flags
-from .hwc import compute_hwc_bias, compute_mwc_bias
 from .indicators import atr, dmi_adx, rsi, sma
 from .level_events import detect_level_events
 from .levels import HTF_TFS, apply_overrides, build_levels_detailed, compute_levels, level_roles_from_details
@@ -14,6 +13,7 @@ from .quality_controls import score_signal
 from .rsi_filters import atr_multiplier_from_rsi, rsi_distance_from_50
 from .signal_builder import build_signals_from_state
 from .setup_candles import detect_setup_candles
+from .timeframe_bias import compute_signal_timeframe_bias
 from .volume_filters import compute_pullback_vol_decline, compute_vol_metrics
 
 
@@ -128,16 +128,7 @@ def replay_run(
             atr_mult = mult["clamped"]
         atr_stop_distance = atr_last * atr_mult if atr_last is not None and atr_mult is not None else None
 
-        weekly = candles_by_tf.get("1w", [])
-        daily = candles_by_tf.get("1d", [])
-        four_hour = candles_by_tf.get("4h", [])
-        hwc = compute_hwc_bias(weekly, daily)
-        mwc = compute_mwc_bias(daily, four_hour)
-        hwc_bias = hwc["hwc_bias"]
-        weekly_bias = hwc.get("weekly", {}).get("bias")
-        daily_bias = hwc.get("daily", {}).get("bias")
-        four_hour_bias = mwc.get("four_hour", {}).get("bias")
-        mwc_bias = mwc["mwc_bias"]
+        signal_tf_bias = compute_signal_timeframe_bias(window)
 
         context = {
             "vol_ma5_slope_ok": vol_metrics["vol_ma5_slope_ok"],
@@ -149,12 +140,7 @@ def replay_run(
             "rsi_distance": rsi_distance,
             "atr_mult": atr_mult,
             "atr_stop_distance": atr_stop_distance,
-            "hwc_bias": hwc_bias,
-            "mwc_bias": mwc_bias,
-            "weekly_bias": weekly_bias,
-            "daily_bias": daily_bias,
-            "four_hour_bias": four_hour_bias,
-            "mwc": mwc,
+            "signal_tf_bias": signal_tf_bias,
             "rules": rules,
             "setups": setups,
             "sr_algorithm": meta.get("algorithm"),
@@ -200,11 +186,6 @@ def replay_run(
             "level_events": events,
             "setup_candles": setup_items,
             "signals": signals,
-            "hwc_bias": hwc_bias,
-            "mwc_bias": mwc_bias,
-            "weekly_bias": weekly_bias,
-            "daily_bias": daily_bias,
-            "four_hour_bias": four_hour_bias,
             "filters": {
                 "vol_ok": vol_metrics["vol_ma5_slope_ok"],
                 "volume_spike_ok": vol_metrics["vol_highest10"],
@@ -282,8 +263,6 @@ def replay_performance_report(result: dict) -> dict:
         "by_symbol": {},
         "by_tf": {},
         "by_direction": {},
-        "by_hwc": {},
-        "by_mwc": {},
         "by_quality": {},
     }
     for trade in trades:
@@ -293,8 +272,6 @@ def replay_performance_report(result: dict) -> dict:
             ("by_symbol", "symbol"),
             ("by_tf", "tf"),
             ("by_direction", "direction"),
-            ("by_hwc", "hwc_bias"),
-            ("by_mwc", "mwc_bias"),
             ("by_quality", "quality_grade"),
         ):
             key = str(trade.get(key_name) or "-")
@@ -329,9 +306,8 @@ def replay_trade_outcomes(result: dict) -> List[dict]:
                 continue
             direction = str(signal.get("direction") or "").lower()
             context = signal.get("context") or {}
-            alignment = _bias_alignment(direction, context)
             score, badges, reasons = score_signal(signal)
-            grade = _quality_grade(score, alignment["bias_alignment_count"])
+            grade = _quality_grade(score)
             signal_time = _to_float(signal.get("time") or item.get("time"))
             rows.append(
                 {
@@ -348,7 +324,7 @@ def replay_trade_outcomes(result: dict) -> List[dict]:
                     "quality_grade": grade,
                     "quality_badges": badges,
                     "quality_reasons": reasons,
-                    **alignment,
+                    "signal_tf_bias": str(context.get("signal_tf_bias") or "neutral").lower(),
                     **outcome,
                 }
             )
@@ -474,30 +450,10 @@ def _replay_candle_rows(items: List[dict]) -> List[dict]:
     return sorted(rows, key=lambda item: item["time"])
 
 
-def _bias_alignment(direction: str, context: dict) -> dict:
-    expected = "bullish" if direction == "long" else "bearish" if direction == "short" else None
-    weekly = str(context.get("weekly_bias") or "neutral").lower()
-    daily = str(context.get("daily_bias") or "neutral").lower()
-    four_hour = str(context.get("four_hour_bias") or "neutral").lower()
-    hwc = str(context.get("hwc_bias") or "neutral").lower()
-    mwc = str(context.get("mwc_bias") or "neutral").lower()
-    values = [weekly, daily, four_hour, hwc, mwc]
-    aligned = sum(1 for value in values if expected is not None and value == expected)
-    return {
-        "weekly_bias": weekly,
-        "daily_bias": daily,
-        "four_hour_bias": four_hour,
-        "hwc_bias": hwc,
-        "mwc_bias": mwc,
-        "bias_alignment_count": aligned,
-        "bias_alignment_label": f"{aligned}/5 aligned",
-    }
-
-
-def _quality_grade(score: int, aligned_count: int) -> str:
-    if score >= 75 and aligned_count >= 4:
+def _quality_grade(score: int) -> str:
+    if score >= 75:
         return "A"
-    if score >= 55 and aligned_count >= 3:
+    if score >= 55:
         return "B"
     return "C"
 

@@ -325,7 +325,9 @@ class ForwardTestService:
         if risk_per_unit <= 0:
             return None
 
-        bias = str(alert.get("hwc_bias") or (signal_payload or {}).get("hwc_bias") or "").strip().lower() or None
+        bias = str(
+            alert.get("signal_tf_bias") or (signal_payload or {}).get("context", {}).get("signal_tf_bias") or ""
+        ).strip().lower() or None
         regime = _regime_from_bias(bias)
 
         conn = _connect()
