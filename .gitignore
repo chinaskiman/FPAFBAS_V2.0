@@ -9,4 +9,5 @@ __pycache__/
 *.pyc
 data/*.db
 data/poller.lock
+data/tmp*
 backups/

@@ -13,6 +13,12 @@
         "fakeout": true,
         "setup_candle": true
       },
+      "rules": {
+        "di_peak_filter": true,
+        "volume_spike_filter": true,
+        "fakeout_volume_filter": true,
+        "pullback_volume_filter": true
+      },
       "levels": {
         "htf_timeframe": "auto",
         "lookback_window": 14,
@@ -34,6 +40,12 @@
         "retest": true,
         "fakeout": true,
         "setup_candle": true
+      },
+      "rules": {
+        "di_peak_filter": true,
+        "volume_spike_filter": true,
+        "fakeout_volume_filter": true,
+        "pullback_volume_filter": true
       },
       "levels": {
         "htf_timeframe": "auto",
@@ -57,6 +69,12 @@
         "fakeout": true,
         "setup_candle": true
       },
+      "rules": {
+        "di_peak_filter": true,
+        "volume_spike_filter": true,
+        "fakeout_volume_filter": true,
+        "pullback_volume_filter": true
+      },
       "levels": {
         "htf_timeframe": "auto",
         "lookback_window": 14,
@@ -78,6 +96,40 @@
         "retest": true,
         "fakeout": true,
         "setup_candle": true
+      },
+      "rules": {
+        "di_peak_filter": true,
+        "volume_spike_filter": true,
+        "fakeout_volume_filter": true,
+        "pullback_volume_filter": true
+      },
+      "levels": {
+        "htf_timeframe": "auto",
+        "lookback_window": 14,
+        "overrides": {
+          "add": [],
+          "disable": []
+        }
+      }
+    },
+    {
+      "symbol": "TONUSDT",
+      "enabled": true,
+      "entry_tfs": [
+        "15m",
+        "1h"
+      ],
+      "setups": {
+        "continuation": true,
+        "retest": true,
+        "fakeout": true,
+        "setup_candle": true
+      },
+      "rules": {
+        "di_peak_filter": true,
+        "volume_spike_filter": true,
+        "fakeout_volume_filter": true,
+        "pullback_volume_filter": true
       },
       "levels": {
         "htf_timeframe": "auto",
