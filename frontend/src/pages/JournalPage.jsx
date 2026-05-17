@@ -2,6 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { exportJournalJsonl, fetchJournalSignals } from "../api/journal.js";
+import {
+  DataTable,
+  EmptyState,
+  ErrorState,
+  LoadingSkeleton,
+  MetricCard,
+  PageHeader,
+  SeverityBadge,
+  StatusBadge
+} from "../components/ui.jsx";
 
 const formatNumber = (value) => {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -16,9 +26,39 @@ const formatTimestamp = (value) => {
 };
 
 const getSignalStatus = (item) => item.status ?? item.payload?.status ?? item.meta?.status ?? "recorded";
-const getSignalSeverity = (item) => item.severity ?? item.payload?.severity ?? item.meta?.severity ?? "normal";
+const getSignalSeverity = (item) => {
+  const severity = item.severity ?? item.payload?.severity ?? item.meta?.severity;
+  if (severity) return severity;
+  const score = Number(item.score ?? item.payload?.score ?? item.meta?.score);
+  if (Number.isFinite(score)) {
+    if (score >= 85) return "critical";
+    if (score >= 70) return "high";
+    if (score >= 50) return "medium";
+  }
+  return "low";
+};
 const getTakeProfit = (item) =>
   item.take_profit_price ?? item.tp_price ?? item.payload?.take_profit?.price ?? item.payload?.target?.price;
+const getStrategyLabel = (item) =>
+  `${item.payload?.strategy?.id ?? item.meta?.strategy_id ?? "-"}@${item.payload?.strategy?.version ?? item.meta?.strategy_version ?? "-"}`;
+const getEntryPrice = (item) => item.entry_price ?? item.payload?.entry?.price;
+const getStopPrice = (item) => item.stop_price ?? item.payload?.stop?.price;
+const getSignalTime = (item) => item.created_at_ms ?? item.payload?.created_at_ms;
+const getStatusTone = (status) => {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized.includes("fail") || normalized.includes("error")) return "danger";
+  if (normalized.includes("active") || normalized.includes("sent")) return "success";
+  if (normalized.includes("new") || normalized.includes("pending")) return "primary";
+  return "reviewed";
+};
+const getDirectionTone = (direction) => (direction === "long" ? "active" : direction === "short" ? "failed" : "muted");
+const formatConfidence = (item) => {
+  const score = item.score ?? item.payload?.score ?? item.meta?.score;
+  if (score === null || score === undefined || Number.isNaN(Number(score))) {
+    return getSignalSeverity(item);
+  }
+  return `${Number(score).toFixed(0)}%`;
+};
 
 const getLocalMs = (date, endOfDay = false) => {
   if (!date) return null;
@@ -101,8 +141,27 @@ export default function JournalPage({ symbols = [] }) {
     return Array.from(new Set(items.map((item) => item.symbol).filter(Boolean)));
   }, [symbols, items]);
 
+  const statusCounts = useMemo(() => {
+    return items.reduce(
+      (acc, item) => {
+        const direction = String(item.direction || "").toLowerCase();
+        if (direction === "long") acc.long += 1;
+        if (direction === "short") acc.short += 1;
+        const severity = String(getSignalSeverity(item)).toLowerCase();
+        if (severity === "critical" || severity === "high") acc.highPriority += 1;
+        return acc;
+      },
+      { long: 0, short: 0, highPriority: 0 }
+    );
+  }, [items]);
+
   const handleSelectDetail = (signalId) => {
     navigate(`/journal/${signalId}`);
+  };
+
+  const handleReplay = (event) => {
+    event.stopPropagation();
+    navigate("/replay");
   };
 
   const handleExport = async () => {
@@ -133,149 +192,188 @@ export default function JournalPage({ symbols = [] }) {
   };
 
   return (
-    <section className="card" id="journal">
-      <h2>Journal</h2>
-      {error ? <div className="error">{error}</div> : null}
+    <div className="app journal-page" id="journal">
+      <PageHeader
+        title="Journal"
+        eyebrow="Signal audit trail"
+        actions={
+          <>
+            <button className="btn" type="button" onClick={loadSignals} disabled={loading}>
+              Refresh
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={handleExport}>
+              Export JSONL
+            </button>
+          </>
+        }
+      >
+        Review generated signals, inspect strategy context, and export historical evidence.
+      </PageHeader>
 
-      <div className="di-controls">
-        <label className="field">
-          <span>Symbol</span>
-          <select value={filters.symbol} onChange={(event) => setFilters((prev) => ({ ...prev, symbol: event.target.value }))}>
-            <option value="">All</option>
-            {uniqueSymbols.map((symbol) => (
-              <option key={`journal-${symbol}`} value={symbol}>
-                {symbol}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>Timeframe</span>
-          <select value={filters.timeframe} onChange={(event) => setFilters((prev) => ({ ...prev, timeframe: event.target.value }))}>
-            <option value="">All</option>
-            <option value="15m">15m</option>
-            <option value="1h">1h</option>
-            <option value="4h">4h</option>
-            <option value="1d">1d</option>
-            <option value="1w">1w</option>
-          </select>
-        </label>
-        <label className="field">
-          <span>From</span>
-          <input type="date" value={filters.fromDate} onChange={(event) => setFilters((prev) => ({ ...prev, fromDate: event.target.value }))} />
-        </label>
-        <label className="field">
-          <span>To</span>
-          <input type="date" value={filters.toDate} onChange={(event) => setFilters((prev) => ({ ...prev, toDate: event.target.value }))} />
-        </label>
-        <label className="field">
-          <span>Limit</span>
-          <select value={filters.limit} onChange={(event) => setFilters((prev) => ({ ...prev, limit: Number(event.target.value) }))}>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-            <option value={200}>200</option>
-          </select>
-        </label>
+      <div className="metric-strip journal-metrics">
+        <MetricCard label="Loaded entries" value={items.length} />
+        <MetricCard label="Filtered rows" value={filteredItems.length} />
+        <MetricCard label="Long signals" value={statusCounts.long} tone="success" />
+        <MetricCard label="Short signals" value={statusCounts.short} tone="danger" />
+        <MetricCard label="High priority" value={statusCounts.highPriority} tone={statusCounts.highPriority > 0 ? "warning" : "default"} />
+        <MetricCard label="Export status" value={exportStatus || "Ready"} />
       </div>
 
-      <div className="inline-form">
-        <button className="btn btn-small" type="button" onClick={() => quickRange(1)}>
-          Last 24h
-        </button>
-        <button className="btn btn-small" type="button" onClick={() => quickRange(7)}>
-          Last 7d
-        </button>
-        <button className="btn btn-small" type="button" onClick={() => quickRange(30)}>
-          Last 30d
-        </button>
-        <button className="btn btn-small" type="button" onClick={loadSignals}>
-          Refresh
-        </button>
-      </div>
-
-      <div className="di-controls">
-        <label className="field">
-          <span>Search</span>
-          <input type="text" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="symbol or signal_id" />
-        </label>
-      </div>
-
-      <div className="di-controls">
-        <label className="field">
-          <span>Admin Token (for export)</span>
-          <input type="password" value={adminToken} onChange={(event) => setAdminToken(event.target.value)} />
-        </label>
-        <button className="btn" type="button" onClick={handleExport}>
-          Export JSONL
-        </button>
-        {exportStatus ? <span className="muted">{exportStatus}</span> : null}
-      </div>
-
-      {loading ? <div className="loading-skeleton" aria-label="Loading journal rows" /> : null}
-      {!loading && filteredItems.length === 0 ? (
-        <p className="empty-state">No alerts found. Adjust filters or increase the date range.</p>
-      ) : null}
-      {filteredItems.length > 0 ? (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Severity</th>
-                <th>Time</th>
-                <th>Symbol</th>
-                <th>TF</th>
-                <th>Direction</th>
-                <th>Strategy</th>
-                <th>Entry</th>
-                <th>SL</th>
-                <th>TP</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredItems.map((item) => (
-                <tr key={item.signal_id} className="clickable" onClick={() => handleSelectDetail(item.signal_id)}>
-                  <td>
-                    <span className="status-badge status-muted">{getSignalStatus(item)}</span>
-                  </td>
-                  <td>
-                    <span className="status-badge status-warning">{getSignalSeverity(item)}</span>
-                  </td>
-                  <td>{formatTimestamp(item.created_at_ms ?? item.payload?.created_at_ms)}</td>
-                  <td>{item.symbol}</td>
-                  <td>{item.timeframe}</td>
-                  <td>
-                    <span className={`status-badge ${item.direction === "long" ? "status-success" : item.direction === "short" ? "status-danger" : "status-muted"}`}>
-                      {item.direction ?? "-"}
-                    </span>
-                  </td>
-                  <td>
-                    {(item.payload?.strategy?.id ?? item.meta?.strategy_id ?? "-")}@
-                    {(item.payload?.strategy?.version ?? item.meta?.strategy_version ?? "-")}
-                  </td>
-                  <td>{formatNumber(item.entry_price ?? item.payload?.entry?.price)}</td>
-                  <td>{formatNumber(item.stop_price ?? item.payload?.stop?.price)}</td>
-                  <td>{formatNumber(getTakeProfit(item))}</td>
-                  <td>
-                    <button
-                      className="btn btn-small btn-secondary"
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleSelectDetail(item.signal_id);
-                      }}
-                    >
-                      Open
-                    </button>
-                  </td>
-                </tr>
+      <section className="card journal-filter-card">
+        <h2>Filters</h2>
+        <div className="journal-filter-bar">
+          <label className="field">
+            <span>Symbol</span>
+            <select value={filters.symbol} onChange={(event) => setFilters((prev) => ({ ...prev, symbol: event.target.value }))}>
+              <option value="">All</option>
+              {uniqueSymbols.map((symbol) => (
+                <option key={`journal-${symbol}`} value={symbol}>
+                  {symbol}
+                </option>
               ))}
-            </tbody>
-          </table>
+            </select>
+          </label>
+          <label className="field">
+            <span>Timeframe</span>
+            <select value={filters.timeframe} onChange={(event) => setFilters((prev) => ({ ...prev, timeframe: event.target.value }))}>
+              <option value="">All</option>
+              <option value="15m">15m</option>
+              <option value="1h">1h</option>
+              <option value="4h">4h</option>
+              <option value="1d">1d</option>
+              <option value="1w">1w</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>From</span>
+            <input type="date" value={filters.fromDate} onChange={(event) => setFilters((prev) => ({ ...prev, fromDate: event.target.value }))} />
+          </label>
+          <label className="field">
+            <span>To</span>
+            <input type="date" value={filters.toDate} onChange={(event) => setFilters((prev) => ({ ...prev, toDate: event.target.value }))} />
+          </label>
+          <label className="field journal-search-field">
+            <span>Search</span>
+            <input type="text" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Symbol or signal id" />
+          </label>
+          <label className="field">
+            <span>Limit</span>
+            <select value={filters.limit} onChange={(event) => setFilters((prev) => ({ ...prev, limit: Number(event.target.value) }))}>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+            </select>
+          </label>
+          <div className="journal-filter-actions">
+            <button className="btn btn-small btn-secondary" type="button" onClick={() => quickRange(1)}>
+              24h
+            </button>
+            <button className="btn btn-small btn-secondary" type="button" onClick={() => quickRange(7)}>
+              7d
+            </button>
+            <button className="btn btn-small btn-secondary" type="button" onClick={() => quickRange(30)}>
+              30d
+            </button>
+          </div>
         </div>
-      ) : null}
+      </section>
 
-    </section>
+      <section className="card journal-export-card">
+        <h2>Export</h2>
+        <div className="journal-export-bar">
+          <label className="field journal-token-field">
+            <span>Admin token</span>
+            <input type="password" value={adminToken} onChange={(event) => setAdminToken(event.target.value)} placeholder="Required for JSONL export" />
+          </label>
+          <button className="btn" type="button" onClick={handleExport}>
+            Export JSONL
+          </button>
+          {exportStatus ? <StatusBadge tone={exportStatus === "Exported" ? "success" : "warning"}>{exportStatus}</StatusBadge> : null}
+        </div>
+      </section>
+
+      <section className="card journal-table-card">
+        <div className="journal-table-header">
+          <div>
+            <h2>Alert History</h2>
+            <p className="muted">
+              Showing {filteredItems.length} of {items.length} loaded journal entries.
+            </p>
+          </div>
+        </div>
+
+        {error ? <ErrorState title="Could not load journal" onRetry={loadSignals}>{error}</ErrorState> : null}
+        {loading ? <LoadingSkeleton label="Loading journal rows" rows={6} /> : null}
+        {!loading && !error && filteredItems.length === 0 ? (
+          <EmptyState title="No journal entries found">Adjust filters or increase the date range.</EmptyState>
+        ) : null}
+        {!loading && filteredItems.length > 0 ? (
+          <DataTable className="journal-data-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Severity</th>
+                  <th>Time</th>
+                  <th>Symbol</th>
+                  <th>TF</th>
+                  <th>Direction</th>
+                  <th>Strategy</th>
+                  <th>Entry</th>
+                  <th>SL</th>
+                  <th>TP</th>
+                  <th>Confidence</th>
+                  <th>Signal ID</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredItems.map((item) => (
+                  <tr key={item.signal_id} className="clickable" onClick={() => handleSelectDetail(item.signal_id)}>
+                    <td>
+                      <StatusBadge tone={getStatusTone(getSignalStatus(item))}>{getSignalStatus(item)}</StatusBadge>
+                    </td>
+                    <td>
+                      <SeverityBadge severity={getSignalSeverity(item)} />
+                    </td>
+                    <td>{formatTimestamp(getSignalTime(item))}</td>
+                    <td className="mono-cell">{item.symbol}</td>
+                    <td>
+                      <StatusBadge tone="primary">{item.timeframe ?? "-"}</StatusBadge>
+                    </td>
+                    <td>
+                      <StatusBadge tone={getDirectionTone(item.direction)}>{item.direction ?? "-"}</StatusBadge>
+                    </td>
+                    <td>{getStrategyLabel(item)}</td>
+                    <td>{formatNumber(getEntryPrice(item))}</td>
+                    <td>{formatNumber(getStopPrice(item))}</td>
+                    <td>{formatNumber(getTakeProfit(item))}</td>
+                    <td>{formatConfidence(item)}</td>
+                    <td className="mono-cell">{item.signal_id ?? "-"}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button
+                          className="btn btn-small"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleSelectDetail(item.signal_id);
+                          }}
+                        >
+                          Open
+                        </button>
+                        <button className="btn btn-small btn-secondary" type="button" onClick={handleReplay}>
+                          Replay
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </DataTable>
+        ) : null}
+      </section>
+    </div>
   );
 }

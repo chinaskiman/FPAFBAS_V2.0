@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart } from "lightweight-charts";
 
+import { EmptyState, ErrorState, LoadingSkeleton, MetricCard, PageHeader, SeverityBadge, StatusBadge } from "../components/ui.jsx";
+
 const ADMIN_TOKEN_SESSION_KEY = "fpafbas_admin_token";
 const REPLAY_ENTRY_TFS = ["15m", "1h"];
 
@@ -174,6 +176,12 @@ export default function DashboardPage({ view = "dashboard" }) {
   const [telegramForm, setTelegramForm] = useState({ enabled: false, bot_token: "", chat_id: "" });
   const [telegramSettingsStatus, setTelegramSettingsStatus] = useState("");
   const [telegramSettingsError, setTelegramSettingsError] = useState("");
+  const [settingsSection, setSettingsSection] = useState("watchlist");
+  const [adminTokenDraft, setAdminTokenDraft] = useState(() => getAdminToken());
+  const [opsLogSearch, setOpsLogSearch] = useState("");
+  const [opsLogLevel, setOpsLogLevel] = useState("all");
+  const [opsLogSource, setOpsLogSource] = useState("all");
+  const [opsSelectedLog, setOpsSelectedLog] = useState(null);
   const [error, setError] = useState("");
 
   const watchlistTfOptions = ["15m", "1h", "4h", "1d"];
@@ -204,6 +212,8 @@ export default function DashboardPage({ view = "dashboard" }) {
   const markerDetailsRef = useRef(new Map());
   const chartTfRef = useRef(chartTf);
   const isOpsView = view === "ops";
+  const isSettingsView = view === "settings";
+  const isAdminConfigView = isOpsView || isSettingsView;
   const chartRefs = useRef({
     main: null,
     volume: null,
@@ -255,46 +265,46 @@ export default function DashboardPage({ view = "dashboard" }) {
     }
     const mainChart = createChart(chartContainerRef.current, {
       height: 360,
-      layout: { background: { color: "#ffffff" }, textColor: "#101828" },
-      grid: { vertLines: { color: "#EAECF0" }, horzLines: { color: "#EAECF0" } },
-      rightPriceScale: { borderColor: "#DDE2E8" },
-      timeScale: { borderColor: "#DDE2E8" }
+      layout: { background: { color: "#111A27" }, textColor: "#A8B3C5" },
+      grid: { vertLines: { color: "#1C2A3B" }, horzLines: { color: "#1C2A3B" } },
+      rightPriceScale: { borderColor: "#26364A" },
+      timeScale: { borderColor: "#26364A" }
     });
     const candleSeries = mainChart.addCandlestickSeries({
-      upColor: "#168A5B",
-      downColor: "#C0352B",
+      upColor: "#10B981",
+      downColor: "#EF4444",
       borderVisible: false,
-      wickUpColor: "#168A5B",
-      wickDownColor: "#C0352B"
+      wickUpColor: "#10B981",
+      wickDownColor: "#EF4444"
     });
-    const sma7Series = mainChart.addLineSeries({ color: "#101828", lineWidth: 2, title: "SMA 7" });
-    const sma21Series = mainChart.addLineSeries({ color: "#1F4E79", lineWidth: 2, title: "SMA 21" });
-    const sma50Series = mainChart.addLineSeries({ color: "#B7791F", lineWidth: 2, title: "SMA 50" });
+    const sma7Series = mainChart.addLineSeries({ color: "#F4F7FB", lineWidth: 2, title: "SMA 7" });
+    const sma21Series = mainChart.addLineSeries({ color: "#3B82F6", lineWidth: 2, title: "SMA 21" });
+    const sma50Series = mainChart.addLineSeries({ color: "#F59E0B", lineWidth: 2, title: "SMA 50" });
 
     const volumeChart = createChart(volumeContainerRef.current, {
       height: 140,
-      layout: { background: { color: "#ffffff" }, textColor: "#101828" },
-      grid: { vertLines: { color: "#EAECF0" }, horzLines: { color: "#EAECF0" } },
-      rightPriceScale: { borderColor: "#DDE2E8" },
-      timeScale: { borderColor: "#DDE2E8" }
+      layout: { background: { color: "#111A27" }, textColor: "#A8B3C5" },
+      grid: { vertLines: { color: "#1C2A3B" }, horzLines: { color: "#1C2A3B" } },
+      rightPriceScale: { borderColor: "#26364A" },
+      timeScale: { borderColor: "#26364A" }
     });
     const volumeSeries = volumeChart.addHistogramSeries({
-      color: "#C8D0DA",
+      color: "#26364A",
       priceFormat: { type: "volume" }
     });
-    const volMa5Series = volumeChart.addLineSeries({ color: "#168A5B", lineWidth: 1 });
-    const volMa10Series = volumeChart.addLineSeries({ color: "#B7791F", lineWidth: 1 });
+    const volMa5Series = volumeChart.addLineSeries({ color: "#22D3EE", lineWidth: 1 });
+    const volMa10Series = volumeChart.addLineSeries({ color: "#F59E0B", lineWidth: 1 });
 
     const indicatorChart = createChart(indicatorContainerRef.current, {
       height: 150,
-      layout: { background: { color: "#ffffff" }, textColor: "#101828" },
-      grid: { vertLines: { color: "#EAECF0" }, horzLines: { color: "#EAECF0" } },
-      rightPriceScale: { borderColor: "#DDE2E8" },
-      timeScale: { borderColor: "#DDE2E8" }
+      layout: { background: { color: "#111A27" }, textColor: "#A8B3C5" },
+      grid: { vertLines: { color: "#1C2A3B" }, horzLines: { color: "#1C2A3B" } },
+      rightPriceScale: { borderColor: "#26364A" },
+      timeScale: { borderColor: "#26364A" }
     });
-    const diPlusSeries = indicatorChart.addLineSeries({ color: "#168A5B", lineWidth: 2, title: "DI+" });
-    const diMinusSeries = indicatorChart.addLineSeries({ color: "#C0352B", lineWidth: 2, title: "DI-" });
-    const adxSeries = indicatorChart.addLineSeries({ color: "#101828", lineWidth: 2, title: "ADX" });
+    const diPlusSeries = indicatorChart.addLineSeries({ color: "#10B981", lineWidth: 2, title: "DI+" });
+    const diMinusSeries = indicatorChart.addLineSeries({ color: "#EF4444", lineWidth: 2, title: "DI-" });
+    const adxSeries = indicatorChart.addLineSeries({ color: "#22D3EE", lineWidth: 2, title: "ADX" });
 
     chartRefs.current = {
       main: mainChart,
@@ -472,7 +482,7 @@ export default function DashboardPage({ view = "dashboard" }) {
   }, []);
 
   useEffect(() => {
-    if (!isOpsView) {
+    if (!isAdminConfigView) {
       return;
     }
     const loadTelegramSettings = async () => {
@@ -490,7 +500,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       }
     };
     loadTelegramSettings();
-  }, [isOpsView]);
+  }, [isAdminConfigView]);
 
   useEffect(() => {
     const loadSuppressed = async () => {
@@ -832,7 +842,7 @@ export default function DashboardPage({ view = "dashboard" }) {
         const label = `${role === "support" ? "Support" : role === "resistance" ? "Resistance" : "Level"} ${Number(level.center).toFixed(2)}`;
         const line = refs.candleSeries.createPriceLine({
           price: level.center,
-          color: role === "support" ? "#168A5B" : role === "resistance" ? "#C0352B" : "#667085",
+          color: role === "support" ? "#10B981" : role === "resistance" ? "#EF4444" : "#6F7D91",
           lineWidth: 1,
           axisLabelVisible: true,
           title: label
@@ -915,6 +925,19 @@ export default function DashboardPage({ view = "dashboard" }) {
     }
     try {
       await saveWatchlist(watchlist);
+    } catch (err) {
+      setLevelsError(err instanceof Error ? err.message : "Unknown error");
+    }
+  };
+
+  const handleRefreshLevels = async () => {
+    if (!selectedSymbol) {
+      return;
+    }
+    try {
+      const data = await fetchJson(`/api/levels/${selectedSymbol}?debug=1&entry_tf=${levelsEntryTf}`);
+      setLevels(data);
+      setLevelsError("");
     } catch (err) {
       setLevelsError(err instanceof Error ? err.message : "Unknown error");
     }
@@ -1242,6 +1265,55 @@ export default function DashboardPage({ view = "dashboard" }) {
     }
   };
 
+  const handleRefreshSettings = async () => {
+    setError("");
+    try {
+      const [watchlistData, symbolsData, qualityData] = await Promise.all([
+        fetchJson("/api/watchlist"),
+        fetchJson("/api/symbols"),
+        fetchJson("/api/quality/settings")
+      ]);
+      setWatchlist(watchlistData);
+      const apiSymbols = Array.isArray(symbolsData.symbols) ? symbolsData.symbols.map((item) => item.symbol) : [];
+      const fallbackSymbols = watchlistData?.symbols ? watchlistData.symbols.map((item) => item.symbol) : [];
+      setSymbols(apiSymbols.length > 0 ? apiSymbols : fallbackSymbols);
+      setQualitySettings(qualityData);
+      setQualityError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load settings");
+    }
+
+    try {
+      const data = await fetchAdminJson("/api/poller/status");
+      setPollerStatus(data);
+      setPollerError("");
+    } catch (err) {
+      setPollerError(err instanceof Error ? err.message : "Unknown error");
+    }
+
+    try {
+      const data = await fetchAdminJson("/api/telegram/settings");
+      setTelegramSettings(data);
+      setTelegramForm({
+        enabled: Boolean(data.enabled),
+        bot_token: "",
+        chat_id: data.chat_id ?? ""
+      });
+      setTelegramSettingsError("");
+    } catch (err) {
+      setTelegramSettingsError(err instanceof Error ? err.message : "Unknown error");
+    }
+  };
+
+  const handleSaveAdminTokenDraft = () => {
+    setAdminToken(adminTokenDraft.trim());
+  };
+
+  const handleClearAdminTokenDraft = () => {
+    setAdminToken("");
+    setAdminTokenDraft("");
+  };
+
   const handleReplayQuickRange = (hours) => {
     const now = Date.now();
     setReplayFromMs(formatDateTimeLocal(now - hours * 60 * 60 * 1000));
@@ -1486,6 +1558,66 @@ export default function DashboardPage({ view = "dashboard" }) {
     suppressedReason === "all"
       ? suppressed
       : suppressed.filter((item) => item.reason === suppressedReason);
+  const nowMs = Date.now();
+  const alerts24h = alertsItems.filter((alert) => getAlertTimeMs(alert) >= nowMs - 24 * 60 * 60 * 1000).length;
+  const activeAlerts = alertsItems.filter((alert) => !alert.notified && !alert.notify_error).length;
+  const alertErrors = alertsItems.filter((alert) => alert.notify_error).length + (pollerStatus?.last_error ? 1 : 0);
+  const scannerStatusTone = getPollerStatusTone(pollerStatus);
+  const scannerStatusLabel = getPollerStatusLabel(pollerStatus);
+  const lastSyncTime = pollerStatus?.last_scan_at ?? pollerStatus?.last_tick_at ?? null;
+  const activeTimeframes = Array.from(
+    new Set(
+      watchlistItems.flatMap((item) =>
+        Array.isArray(item.entry_tfs) && item.entry_tfs.length > 0 ? item.entry_tfs : watchlistDefaultTfs
+      )
+    )
+  );
+  const enabledWatchlistCount = watchlistItems.filter((item) => item.enabled !== false).length;
+  const activeRuleLabels = watchlistRuleOptions
+    .filter(([ruleKey]) => watchlistItems.some((item) => normalizeWatchlistRules(item.rules)[ruleKey]))
+    .map(([, label]) => label);
+  const settingsNav = [
+    ["watchlist", "Watchlist", "Symbols and monitored markets"],
+    ["scanner", "Scanner", "Runtime and market monitoring"],
+    ["strategies", "Strategies", "Signal rules and filters"],
+    ["risk", "Risk", "Paper trade assumptions"],
+    ["alerts", "Alerts", "Severity, cooldowns, delivery"],
+    ["integrations", "Integrations", "External services"],
+    ["system", "System/Admin", "Protected tools and debug"]
+  ];
+  const operationalLogs = buildOperationalLogs({ pollerStatus, suppressed, alertsItems });
+  const opsLogSources = ["all", ...Array.from(new Set(operationalLogs.map((item) => item.source).filter(Boolean)))];
+  const filteredOperationalLogs = operationalLogs.filter((item) => {
+    const search = opsLogSearch.trim().toLowerCase();
+    const matchesSearch =
+      !search ||
+      [item.message, item.source, item.symbol, item.traceId, item.level]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(search));
+    const matchesLevel = opsLogLevel === "all" || item.level === opsLogLevel;
+    const matchesSource = opsLogSource === "all" || item.source === opsLogSource;
+    return matchesSearch && matchesLevel && matchesSource;
+  });
+  const incidentLogs = operationalLogs.filter((item) => ["WARN", "ERROR", "CRITICAL"].includes(item.level)).slice(0, 6);
+  const serviceRows = buildServiceRows({
+    pollerStatus,
+    telegramSettings,
+    scannerStatusLabel,
+    scannerStatusTone,
+    lastSyncTime,
+    alertErrors,
+    symbolsCount: watchlistItems.length || symbols.length
+  });
+  const latestAlert = alertDetails ?? filteredAlerts[0] ?? null;
+  const supportLevels = getLevelsByRole(levels, "support");
+  const resistanceLevels = getLevelsByRole(levels, "resistance");
+  const keyLevel = latestAlert?.level ?? chartDetails?.level ?? levels?.final_levels?.[0] ?? "-";
+  const pinnedLevels = getOverrides(watchlist, selectedSymbol, "add");
+  const disabledLevels = getOverrides(watchlist, selectedSymbol, "disable");
+  const effectiveLevels = buildEffectiveLevelItems(levels, pinnedLevels, disabledLevels);
+  const activeSupportCount = effectiveLevels.filter((level) => level.role === "support").length;
+  const activeResistanceCount = effectiveLevels.filter((level) => level.role === "resistance").length;
+  const overrideCount = pinnedLevels.length + disabledLevels.length;
   const isReplayActive = replayItems.length > 0;
   const workspaceSignals = buildWorkspaceSignalRows(
     showLevelEvents ? chartLevelEvents : [],
@@ -1503,197 +1635,823 @@ export default function DashboardPage({ view = "dashboard" }) {
   const showLevels = view === "levels";
   const showSettings = view === "settings";
   const showOps = view === "ops";
+  const showLegacyDashboardSections = false;
   return (
-    <div className="app">
+    <div className={`app ${showDashboard ? "signals-page" : showReplay ? "replay-page" : showLevels ? "levels-page" : showSettings ? "settings-page" : showOps ? "ops-page" : ""}`}>
       {error ? <div className="error">{error}</div> : null}
-      {showSettings ? (
-        <section className="card">
-        <h2>Watchlist</h2>
-        {watchlistFormError ? <div className="error">{watchlistFormError}</div> : null}
-        {watchlistSaveStatus ? <div className="muted">{watchlistSaveStatus}</div> : null}
-        <div className="di-controls">
-          <label className="field">
-            <span>Add One Symbol</span>
-            <input
-              type="text"
-              value={watchlistFormSymbol}
-              onChange={(event) => setWatchlistFormSymbol(event.target.value.toUpperCase())}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  handleAddWatchlistSymbol();
-                }
-              }}
-              placeholder="e.g. BTCUSDT"
-            />
-          </label>
-          <div className="field">
-            <span>Timeframes</span>
-            <div className="inline-form">
-              {watchlistTfOptions.map((tf) => (
-                <label key={`tf-${tf}`} className="checkbox">
+      {showDashboard ? (
+        <>
+          <PageHeader
+            title="Signals"
+            eyebrow="Live monitoring"
+            actions={
+              <>
+                <button
+                  className="btn"
+                  type="button"
+                  onClick={() => {
+                    fetchChartData();
+                    fetchAlertsPage();
+                  }}
+                  disabled={chartLoading}
+                >
+                  Refresh
+                </button>
+                <label className="checkbox toggle-control">
                   <input
                     type="checkbox"
-                    checked={watchlistFormTfs.includes(tf)}
-                    onChange={() => handleToggleWatchlistTf(tf)}
+                    checked={alertsAutoRefresh}
+                    onChange={(event) => setAlertsAutoRefresh(event.target.checked)}
                   />
-                  <span>{tf}</span>
+                  <span>Auto-refresh</span>
                 </label>
-              ))}
-            </div>
+                <button className="btn btn-secondary" type="button" onClick={() => window.open(getBinanceLink(selectedSymbol), "_blank", "noopener")}>
+                  Open Binance
+                </button>
+                <button className="btn btn-secondary" type="button" onClick={() => window.open(getTradingViewLink(selectedSymbol), "_blank", "noopener")}>
+                  Open TradingView
+                </button>
+              </>
+            }
+          >
+            Live Binance USDT perpetual alert monitoring
+          </PageHeader>
+          <div className="metric-strip">
+            <MetricCard label="Scanner status" value={scannerStatusLabel} tone={scannerStatusTone === "danger" ? "danger" : scannerStatusTone === "warning" ? "warning" : "success"} />
+            <MetricCard label="Symbols monitored" value={watchlistItems.length || symbols.length || "-"} />
+            <MetricCard label="Alerts 24h" value={alerts24h} />
+            <MetricCard label="Active alerts" value={activeAlerts} tone="success" />
+            <MetricCard label="Errors" value={alertErrors} tone={alertErrors > 0 ? "danger" : "default"} />
+            <MetricCard label="Last sync" value={lastSyncTime ? new Date(lastSyncTime).toLocaleTimeString() : "-"} />
           </div>
-          <button className="btn" type="button" onClick={handleAddWatchlistSymbol}>
-            Add One
-          </button>
-        </div>
+        </>
+      ) : null}
+      {showReplay ? (
+        <>
+          <PageHeader
+            title="Replay Lab"
+            eyebrow="Historical simulation"
+            actions={
+              <>
+                <button className="btn" type="button" onClick={handleReplayRun} disabled={replayLoading}>
+                  {replayLoading ? "Running..." : "Run Replay"}
+                </button>
+                <button className="btn btn-secondary" type="button" onClick={() => window.open(getTradingViewLink(selectedSymbol), "_blank", "noopener")}>
+                  Open TradingView
+                </button>
+              </>
+            }
+          >
+            Rebuild alert context across historical windows without changing live scanner state.
+          </PageHeader>
+          <div className="metric-strip">
+            <MetricCard label="Replay steps" value={replaySummary?.total_steps ?? "-"} />
+            <MetricCard label="Signals" value={replaySummary?.signals_total ?? "-"} />
+            <MetricCard label="Trades" value={replayTradeStats.total ?? 0} />
+            <MetricCard label="Win rate" value={formatPercentFraction(replayTradeStats.win_rate)} tone="success" />
+            <MetricCard label="Total R" value={formatNumber(replayTradeStats.realized_r_total)} />
+            <MetricCard label="Window" value={replayItems.length > 0 ? `${replayIndex + 1}/${replayItems.length}` : "-"} />
+          </div>
+        </>
+      ) : null}
+      {showLevels ? (
+        <>
+          <PageHeader
+            title="Active S/R"
+            eyebrow="Market structure"
+            actions={
+              <>
+                <button className="btn btn-secondary" type="button" onClick={handleRefreshLevels}>
+                  Refresh
+                </button>
+                <button className="btn" type="button" onClick={handleSaveLevels}>
+                  Save Overrides
+                </button>
+              </>
+            }
+          >
+            Live support and resistance levels used by the scanner.
+          </PageHeader>
 
-        <div className="di-controls">
-          <label className="field watchlist-bulk-field">
-            <span>Quick Add Symbols (comma / space / newline)</span>
-            <textarea
-              value={watchlistBulkSymbols}
-              onChange={(event) => setWatchlistBulkSymbols(event.target.value.toUpperCase())}
-              placeholder={"BTCUSDT ETHUSDT SOLUSDT\nor BTCUSDT,ETHUSDT,SOLUSDT"}
-              rows={3}
-            />
-          </label>
-          <button className="btn" type="button" onClick={handleAddWatchlistSymbolsBulk}>
-            Add Many
-          </button>
-        </div>
-
-        {watchlist && Array.isArray(watchlist.symbols) ? (
-          <>
-            <div className="di-controls">
+          <section className="card levels-filter-card">
+            <h2>Controls</h2>
+            <div className="levels-filter-bar">
               <label className="field">
-                <span>Find Symbol</span>
-                <input
-                  type="text"
-                  value={watchlistFilter}
-                  onChange={(event) => setWatchlistFilter(event.target.value.toUpperCase())}
-                  placeholder="e.g. BTC"
-                />
+                <span>Symbol</span>
+                <select value={selectedSymbol} onChange={(event) => setSelectedSymbol(event.target.value)}>
+                  {symbols.map((symbol) => (
+                    <option key={symbol} value={symbol}>
+                      {symbol}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <div className="inline-form">
-                <button className="btn btn-small" type="button" onClick={handleSelectAllVisibleWatchlistSymbols}>
-                  Select Visible
-                </button>
-                <button className="btn btn-small" type="button" onClick={handleClearWatchlistSelection}>
-                  Clear Selection
-                </button>
-                <button
-                  className="btn btn-small"
-                  type="button"
-                  disabled={watchlistSelectedSymbols.length === 0}
-                  onClick={handleRemoveSelectedWatchlistSymbols}
-                >
-                  Remove Selected ({watchlistSelectedSymbols.length})
-                </button>
-              </div>
+              <label className="field">
+                <span>Entry timeframe</span>
+                <select value={levelsEntryTf} onChange={(event) => setLevelsEntryTf(event.target.value)}>
+                  <option value="15m">15m uses 4H S/R</option>
+                  <option value="1h">1h uses Daily S/R</option>
+                </select>
+              </label>
+              <button className="btn btn-secondary" type="button" onClick={handleRefreshLevels}>
+                Refresh
+              </button>
+              <span className="levels-last-updated">
+                Last updated {lastSyncTime ? formatTimestamp(lastSyncTime) : "-"}
+              </span>
             </div>
-            <p className="muted">
-              Showing {filteredWatchlistItems.length} of {watchlistItems.length} symbols.
-            </p>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Pick</th>
-                  <th>Symbol</th>
-                  <th>Entry TFs</th>
-                  <th>Rules</th>
-                  <th>Enabled</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredWatchlistItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="muted">
-                      No symbols match the filter.
-                    </td>
-                  </tr>
-                ) : (
-                filteredWatchlistItems.map((item) => (
-                  <tr key={`wl-${item.symbol}`}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={watchlistSelectedSymbols.includes(item.symbol)}
-                        onChange={() => handleToggleWatchlistSelection(item.symbol)}
-                      />
-                    </td>
-                    <td>{item.symbol}</td>
-                    <td>
-                      <div className="inline-form inline-form-tight">
-                        {watchlistTfOptions.map((tf) => {
-                          const entryTfs =
-                            Array.isArray(item.entry_tfs) && item.entry_tfs.length > 0
-                              ? item.entry_tfs
-                              : watchlistDefaultTfs;
-                          return (
-                            <label key={`wl-${item.symbol}-${tf}`} className="checkbox">
-                              <input
-                                type="checkbox"
-                                checked={entryTfs.includes(tf)}
-                                onChange={() => handleToggleWatchlistEntryTf(item.symbol, tf)}
-                              />
-                              <span>{tf}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="inline-form inline-form-tight">
-                        {watchlistRuleOptions.map(([ruleKey, label]) => {
-                          const rules = normalizeWatchlistRules(item.rules);
-                          return (
-                            <label key={`wl-${item.symbol}-${ruleKey}`} className="checkbox">
-                              <input
-                                type="checkbox"
-                                checked={rules[ruleKey]}
-                                onChange={() => handleToggleWatchlistRule(item.symbol, ruleKey)}
-                              />
-                              <span>{label}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </td>
-                    <td>{String(item.enabled)}</td>
-                    <td>
-                      <div className="inline-form inline-form-tight">
-                        <button
-                          className="btn btn-small"
-                          type="button"
-                          onClick={() => handleSelectWatchlistSymbol(item.symbol)}
-                        >
-                          Select
-                        </button>
-                        <button
-                          className="btn btn-small"
-                          type="button"
-                          onClick={() => handleRemoveWatchlistSymbol(item.symbol)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-                )}
-              </tbody>
-            </table>
+          </section>
+
+          <div className="metric-strip levels-metrics">
+            <MetricCard label="Current symbol" value={selectedSymbol || "-"} />
+            <MetricCard label="Entry timeframe" value={levelsEntryTf || "-"} />
+            <MetricCard
+              label="HTF source / close"
+              value={levels?.htf_timeframe ?? "-"}
+              detail={`Close ${formatNumber(levels?.last_close_used)}`}
+            />
+            <MetricCard label="Active supports" value={levels ? activeSupportCount : "-"} tone="success" />
+            <MetricCard label="Active resistances" value={levels ? activeResistanceCount : "-"} tone="danger" />
+            <MetricCard label="Overrides" value={overrideCount} />
           </div>
-          </>
-        ) : (
-          <p className="muted">Loading watchlist...</p>
-        )}
-      </section>
+        </>
+      ) : null}
+      {showSettings ? (
+        <>
+          <PageHeader
+            title="Settings"
+            eyebrow="Control center"
+            actions={
+              <button className="btn btn-secondary" type="button" onClick={handleRefreshSettings}>
+                Refresh
+              </button>
+            }
+          >
+            Configure scanner behavior, watchlists, strategy rules, alerts, and system tools.
+          </PageHeader>
+
+          <div className="settings-layout">
+            <SettingsRail sections={settingsNav} active={settingsSection} onSelect={setSettingsSection} />
+            <div className="settings-content">
+              {error ? (
+                <ErrorState title="Could not load settings" onRetry={handleRefreshSettings} onViewLogs={() => window.location.assign("/ops")}>
+                  Check the bot service status or retry the request.
+                </ErrorState>
+              ) : null}
+              {watchlistFormError ? <div className="error">{watchlistFormError}</div> : null}
+              {watchlistSaveStatus ? <div className="settings-feedback">{watchlistSaveStatus}</div> : null}
+
+              {settingsSection === "watchlist" ? (
+                <>
+                  <section className="card settings-card">
+                    <div className="card-header">
+                      <div>
+                        <h2>Watchlist</h2>
+                        <span className="muted">Manage symbols monitored by the scanner.</span>
+                      </div>
+                    </div>
+                    <div className="card-body">
+                      <div className="metric-strip settings-metrics">
+                        <MetricCard label="Total symbols" value={watchlistItems.length || "-"} />
+                        <MetricCard label="Enabled symbols" value={enabledWatchlistCount || "-"} tone="success" />
+                        <MetricCard label="Active timeframes" value={activeTimeframes.length ? activeTimeframes.join(", ") : "-"} />
+                        <MetricCard label="Rules enabled" value={activeRuleLabels.length ? activeRuleLabels.join(", ") : "-"} />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="card settings-card">
+                    <div className="card-header">
+                      <h2>Add Symbols</h2>
+                    </div>
+                    <div className="card-body">
+                      <div className="settings-form-grid">
+                        <label className="field">
+                          <span>Add symbol</span>
+                          <input
+                            type="text"
+                            value={watchlistFormSymbol}
+                            onChange={(event) => setWatchlistFormSymbol(event.target.value.toUpperCase())}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                handleAddWatchlistSymbol();
+                              }
+                            }}
+                            placeholder="BTCUSDT"
+                          />
+                        </label>
+                        <div className="field">
+                          <span>Default timeframes</span>
+                          <div className="settings-chip-row">
+                            {watchlistTfOptions.map((tf) => (
+                              <label key={`tf-${tf}`} className="settings-chip settings-chip-control">
+                                <input
+                                  type="checkbox"
+                                  checked={watchlistFormTfs.includes(tf)}
+                                  onChange={() => handleToggleWatchlistTf(tf)}
+                                />
+                                <span>{tf}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="settings-action-cell">
+                          <button className="btn" type="button" onClick={handleAddWatchlistSymbol}>
+                            Add symbol
+                          </button>
+                        </div>
+                      </div>
+                      <div className="settings-bulk-row">
+                        <label className="field watchlist-bulk-field">
+                          <span>Bulk add symbols</span>
+                          <textarea
+                            value={watchlistBulkSymbols}
+                            onChange={(event) => setWatchlistBulkSymbols(event.target.value.toUpperCase())}
+                            placeholder="BTCUSDT, ETHUSDT, SOLUSDT"
+                            rows={3}
+                          />
+                        </label>
+                        <button className="btn btn-secondary" type="button" onClick={handleAddWatchlistSymbolsBulk}>
+                          Bulk add
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="card settings-card">
+                    <div className="card-header settings-table-header">
+                      <div>
+                        <h2>Watchlist Table</h2>
+                        <span className="muted">
+                          Showing {filteredWatchlistItems.length} of {watchlistItems.length} symbols.
+                        </span>
+                      </div>
+                      <div className="settings-table-actions">
+                        <input
+                          type="text"
+                          value={watchlistFilter}
+                          onChange={(event) => setWatchlistFilter(event.target.value.toUpperCase())}
+                          placeholder="Find symbol"
+                        />
+                        <button className="btn btn-small btn-secondary" type="button" onClick={handleSelectAllVisibleWatchlistSymbols}>
+                          Select visible
+                        </button>
+                        <button className="btn btn-small btn-secondary" type="button" onClick={handleClearWatchlistSelection}>
+                          Clear
+                        </button>
+                        <button
+                          className="btn btn-small btn-danger"
+                          type="button"
+                          disabled={watchlistSelectedSymbols.length === 0}
+                          onClick={handleRemoveSelectedWatchlistSymbols}
+                        >
+                          Remove selected ({watchlistSelectedSymbols.length})
+                        </button>
+                      </div>
+                    </div>
+                    <div className="card-body">
+                      {watchlist && Array.isArray(watchlist.symbols) ? (
+                        filteredWatchlistItems.length > 0 ? (
+                          <div className="table-wrap settings-watchlist-table">
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Select</th>
+                                  <th>Symbol</th>
+                                  <th>Enabled</th>
+                                  <th>Timeframes</th>
+                                  <th>Rules</th>
+                                  <th>Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {filteredWatchlistItems.map((item) => {
+                                  const entryTfs =
+                                    Array.isArray(item.entry_tfs) && item.entry_tfs.length > 0
+                                      ? item.entry_tfs
+                                      : watchlistDefaultTfs;
+                                  const rules = normalizeWatchlistRules(item.rules);
+                                  return (
+                                    <tr key={`settings-wl-${item.symbol}`}>
+                                      <td>
+                                        <input
+                                          type="checkbox"
+                                          checked={watchlistSelectedSymbols.includes(item.symbol)}
+                                          onChange={() => handleToggleWatchlistSelection(item.symbol)}
+                                          aria-label={`Select ${item.symbol}`}
+                                        />
+                                      </td>
+                                      <td className="settings-symbol-cell">{item.symbol}</td>
+                                      <td>
+                                        <StatusBadge tone={item.enabled === false ? "muted" : "success"}>
+                                          {item.enabled === false ? "Disabled" : "Enabled"}
+                                        </StatusBadge>
+                                      </td>
+                                      <td>
+                                        <div className="settings-chip-row">
+                                          {watchlistTfOptions.map((tf) => (
+                                            <label
+                                              key={`settings-wl-${item.symbol}-${tf}`}
+                                              className={`settings-chip settings-chip-control ${entryTfs.includes(tf) ? "settings-chip-active" : ""}`}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={entryTfs.includes(tf)}
+                                                onChange={() => handleToggleWatchlistEntryTf(item.symbol, tf)}
+                                              />
+                                              <span>{tf}</span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <div className="settings-chip-row">
+                                          {watchlistRuleOptions.map(([ruleKey, label]) => (
+                                            <label
+                                              key={`settings-wl-${item.symbol}-${ruleKey}`}
+                                              className={`settings-chip settings-chip-control ${rules[ruleKey] ? "settings-chip-active" : ""}`}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={rules[ruleKey]}
+                                                onChange={() => handleToggleWatchlistRule(item.symbol, ruleKey)}
+                                              />
+                                              <span>{label}</span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <div className="row-actions">
+                                          <button
+                                            className="btn btn-small btn-secondary"
+                                            type="button"
+                                            onClick={() => handleSelectWatchlistSymbol(item.symbol)}
+                                          >
+                                            Edit
+                                          </button>
+                                          <button
+                                            className="btn btn-small btn-danger"
+                                            type="button"
+                                            onClick={() => handleRemoveWatchlistSymbol(item.symbol)}
+                                          >
+                                            Remove
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <EmptyState title="No symbols in watchlist" actions={<button className="btn btn-small" type="button" onClick={handleAddWatchlistSymbol}>Add symbol</button>}>
+                            Add symbols such as BTCUSDT, ETHUSDT, or SOLUSDT to start monitoring futures alerts.
+                          </EmptyState>
+                        )
+                      ) : (
+                        <LoadingSkeleton label="Loading watchlist" rows={6} />
+                      )}
+                    </div>
+                  </section>
+                </>
+              ) : null}
+
+              {settingsSection === "scanner" ? (
+                <div className="settings-section-grid">
+                  <SettingsInfoCard
+                    title="Runtime"
+                    items={[
+                      ["Scanner status", scannerStatusLabel],
+                      ["Mode", pollerStatus?.mode ?? "-"],
+                      ["Last tick", formatTimestamp(pollerStatus?.last_tick_at)],
+                      ["Last scan", formatTimestamp(pollerStatus?.last_scan_at)]
+                    ]}
+                  />
+                  <SettingsInfoCard
+                    title="Timeframes"
+                    items={[
+                      ["Entry timeframes", activeTimeframes.length ? activeTimeframes.join(", ") : "-"],
+                      ["Chart timeframe", chartTf],
+                      ["Levels timeframe", levelsEntryTf],
+                      ["Replay timeframe", replayTf]
+                    ]}
+                  />
+                  <SettingsInfoCard
+                    title="Market Data"
+                    items={[
+                      ["Active symbols", symbols.length || watchlistItems.length || "-"],
+                      ["Selected symbol", selectedSymbol || "-"],
+                      ["Last scan count", pollerStatus?.last_scan_count ?? "-"],
+                      ["Last new alerts", pollerStatus?.last_new_alerts ?? "-"]
+                    ]}
+                  />
+                  <SettingsInfoCard
+                    title="Detection Rules"
+                    items={[
+                      ["DI/ADX", activeRuleLabels.includes("DI") ? "Enabled" : "Per-symbol"],
+                      ["Volume", activeRuleLabels.includes("Vol") ? "Enabled" : "Per-symbol"],
+                      ["Pullback", activeRuleLabels.includes("Pullback") ? "Enabled" : "Per-symbol"],
+                      ["Fake volume", activeRuleLabels.includes("Fake vol") ? "Enabled" : "Per-symbol"]
+                    ]}
+                  />
+                </div>
+              ) : null}
+
+              {settingsSection === "strategies" ? (
+                <div className="settings-section-grid">
+                  <section className="card settings-card settings-wide-card">
+                    <div className="card-header">
+                      <h2>Strategy Summary</h2>
+                    </div>
+                    <div className="card-body">
+                      <SettingsMetaGrid
+                        items={[
+                          ["Strategy", "default@1"],
+                          ["Symbols using strategy", watchlistItems.length || "-"],
+                          ["Active rule families", activeRuleLabels.length ? activeRuleLabels.join(", ") : "-"],
+                          ["S/R confirmation", "Configured per scanner rules"]
+                        ]}
+                      />
+                      <p className="muted">
+                        Strategy controls currently live at the symbol rule level. Use the Watchlist table to enable or disable
+                        DI, Volume, Pullback, and Fake Volume filters per market.
+                      </p>
+                    </div>
+                  </section>
+                  <SettingsInfoCard
+                    title="Directional Filters"
+                    items={[
+                      ["Long/short logic", "Scanner controlled"],
+                      ["Entry timeframes", activeTimeframes.length ? activeTimeframes.join(", ") : "-"],
+                      ["Higher timeframe S/R", levels?.htf_timeframe ?? "-"]
+                    ]}
+                  />
+                  <SettingsInfoCard
+                    title="Volume Rules"
+                    items={[
+                      ["Volume filter", activeRuleLabels.includes("Vol") ? "Enabled" : "Per-symbol"],
+                      ["Pullback volume", activeRuleLabels.includes("Pullback") ? "Enabled" : "Per-symbol"],
+                      ["Fake volume", activeRuleLabels.includes("Fake vol") ? "Enabled" : "Per-symbol"]
+                    ]}
+                  />
+                </div>
+              ) : null}
+
+              {settingsSection === "risk" ? (
+                <div className="settings-section-grid">
+                  <section className="card settings-card settings-wide-card">
+                    <div className="card-header">
+                      <h2>Risk</h2>
+                    </div>
+                    <div className="card-body">
+                      <EmptyState title="No editable risk controls exposed">
+                        Risk and paper trading assumptions are not currently exposed by the Settings API. Paper trade performance remains available on the Paper Trades page.
+                      </EmptyState>
+                      <div className="settings-warning-note">
+                        Changing leverage affects simulated risk calculations only unless connected to live execution.
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+
+              {settingsSection === "alerts" ? (
+                <section className="card settings-card">
+                  <div className="card-header">
+                    <div>
+                      <h2>Alerts</h2>
+                      <span className="muted">Configure signal quality, cooldowns, rate limits, and quiet hours.</span>
+                    </div>
+                    <button className="btn btn-small" type="button" onClick={handleSaveQuality}>
+                      Save alert settings
+                    </button>
+                  </div>
+                  <div className="card-body">
+                    {qualityError ? <div className="error">{qualityError}</div> : null}
+                    {qualitySettings ? (
+                      <div className="settings-form-columns">
+                        <SettingsFieldGroup title="Severity Thresholds">
+                          {["break", "retest", "setup", "fakeout"].map((key) => (
+                            <label className="field" key={`min-${key}`}>
+                              <span>{key}</span>
+                              <input
+                                type="number"
+                                value={qualitySettings.min_score_by_type?.[key] ?? ""}
+                                onChange={(event) =>
+                                  setQualitySettings((prev) =>
+                                    updateQuality(prev, ["min_score_by_type", key], event.target.value)
+                                  )
+                                }
+                              />
+                            </label>
+                          ))}
+                        </SettingsFieldGroup>
+                        <SettingsFieldGroup title="Alert Cooldown">
+                          {["break", "retest", "setup", "fakeout"].map((key) => (
+                            <label className="field" key={`cooldown-${key}`}>
+                              <span>{key} minutes</span>
+                              <input
+                                type="number"
+                                value={qualitySettings.cooldown_minutes_by_type?.[key] ?? ""}
+                                onChange={(event) =>
+                                  setQualitySettings((prev) =>
+                                    updateQuality(prev, ["cooldown_minutes_by_type", key], event.target.value)
+                                  )
+                                }
+                              />
+                            </label>
+                          ))}
+                        </SettingsFieldGroup>
+                        <SettingsFieldGroup title="Duplicate Suppression">
+                          <label className="field">
+                            <span>Per symbol / hour</span>
+                            <input
+                              type="number"
+                              value={qualitySettings.max_alerts_per_symbol_per_hour ?? ""}
+                              onChange={(event) =>
+                                setQualitySettings((prev) =>
+                                  updateQuality(prev, ["max_alerts_per_symbol_per_hour"], event.target.value)
+                                )
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Global / hour</span>
+                            <input
+                              type="number"
+                              value={qualitySettings.max_alerts_global_per_hour ?? ""}
+                              onChange={(event) =>
+                                setQualitySettings((prev) =>
+                                  updateQuality(prev, ["max_alerts_global_per_hour"], event.target.value)
+                                )
+                              }
+                            />
+                          </label>
+                        </SettingsFieldGroup>
+                        <SettingsFieldGroup title="Quiet Hours">
+                          <label className="field">
+                            <span>Enabled</span>
+                            <select
+                              value={qualitySettings.quiet_hours?.enabled ? "yes" : "no"}
+                              onChange={(event) =>
+                                setQualitySettings((prev) =>
+                                  updateQuality(prev, ["quiet_hours", "enabled"], event.target.value === "yes")
+                                )
+                              }
+                            >
+                              <option value="no">No</option>
+                              <option value="yes">Yes</option>
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Start</span>
+                            <input
+                              type="text"
+                              value={qualitySettings.quiet_hours?.start ?? ""}
+                              onChange={(event) =>
+                                setQualitySettings((prev) =>
+                                  updateQuality(prev, ["quiet_hours", "start"], event.target.value)
+                                )
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>End</span>
+                            <input
+                              type="text"
+                              value={qualitySettings.quiet_hours?.end ?? ""}
+                              onChange={(event) =>
+                                setQualitySettings((prev) =>
+                                  updateQuality(prev, ["quiet_hours", "end"], event.target.value)
+                                )
+                              }
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Timezone</span>
+                            <input
+                              type="text"
+                              value={qualitySettings.quiet_hours?.tz ?? ""}
+                              onChange={(event) =>
+                                setQualitySettings((prev) =>
+                                  updateQuality(prev, ["quiet_hours", "tz"], event.target.value)
+                                )
+                              }
+                            />
+                          </label>
+                        </SettingsFieldGroup>
+                      </div>
+                    ) : (
+                      <LoadingSkeleton label="Loading alert settings" rows={6} />
+                    )}
+                    {qualitySaveStatus ? <p className="settings-feedback">{qualitySaveStatus}</p> : null}
+                  </div>
+                </section>
+              ) : null}
+
+              {settingsSection === "integrations" ? (
+                <div className="settings-section-grid">
+                  <section className="card settings-card settings-wide-card">
+                    <div className="card-header">
+                      <div>
+                        <h2>Telegram Alerts</h2>
+                        <span className="muted">Protected admin action. Token is required to save or test delivery.</span>
+                      </div>
+                      <StatusBadge tone={telegramSettings?.enabled ? "success" : "muted"}>
+                        {telegramSettings?.enabled ? "Connected" : "Not configured"}
+                      </StatusBadge>
+                    </div>
+                    <div className="card-body">
+                      {telegramSettingsError ? <div className="error">{telegramSettingsError}</div> : null}
+                      <div className="settings-form-grid settings-form-grid-telegram">
+                        <label className="checkbox toggle-control">
+                          <input
+                            type="checkbox"
+                            checked={telegramForm.enabled}
+                            onChange={(event) =>
+                              setTelegramForm((prev) => ({ ...prev, enabled: event.target.checked }))
+                            }
+                          />
+                          <span>Telegram alerts enabled</span>
+                        </label>
+                        <label className="field">
+                          <span>Bot token</span>
+                          <input
+                            type="password"
+                            value={telegramForm.bot_token}
+                            onChange={(event) =>
+                              setTelegramForm((prev) => ({ ...prev, bot_token: event.target.value }))
+                            }
+                            placeholder={
+                              telegramSettings?.has_bot_token ? "Token saved; leave blank to keep it" : "Telegram bot token"
+                            }
+                            autoComplete="off"
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Chat ID</span>
+                          <input
+                            type="text"
+                            value={telegramForm.chat_id}
+                            onChange={(event) =>
+                              setTelegramForm((prev) => ({ ...prev, chat_id: event.target.value }))
+                            }
+                            placeholder="Telegram chat ID"
+                          />
+                        </label>
+                        <button className="btn" type="button" onClick={handleSaveTelegramSettings}>
+                          Save Telegram
+                        </button>
+                      </div>
+                      <div className="settings-test-row">
+                        <input
+                          type="text"
+                          value={telegramText}
+                          onChange={(event) => setTelegramText(event.target.value)}
+                          placeholder="Test message (optional)"
+                        />
+                        <button className="btn btn-secondary" type="button" onClick={handleSendTelegramTest}>
+                          Test Telegram Alert
+                        </button>
+                      </div>
+                      <div className="settings-chip-row">
+                        <StatusBadge tone={telegramSettings?.has_bot_token ? "success" : "warning"}>
+                          {telegramSettings?.has_bot_token ? "Bot token configured" : "No bot token saved"}
+                        </StatusBadge>
+                        {telegramSettingsStatus ? <span className="settings-feedback">{telegramSettingsStatus}</span> : null}
+                        {telegramFeedback ? (
+                          <span className={telegramFeedback.ok ? "settings-feedback" : "error-text"}>
+                            {telegramFeedback.message}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </section>
+                  <SettingsIntegrationCard
+                    name="Binance"
+                    status="Configured"
+                    description="Market data links open for the selected symbol."
+                    action={
+                      <button className="btn btn-small btn-secondary" type="button" onClick={() => window.open(getBinanceLink(selectedSymbol), "_blank", "noopener")}>
+                        Open Binance
+                      </button>
+                    }
+                  />
+                  <SettingsIntegrationCard
+                    name="TradingView"
+                    status="Configured"
+                    description="Chart links open for the selected symbol."
+                    action={
+                      <button className="btn btn-small btn-secondary" type="button" onClick={() => window.open(getTradingViewLink(selectedSymbol), "_blank", "noopener")}>
+                        Open TradingView
+                      </button>
+                    }
+                  />
+                </div>
+              ) : null}
+
+              {settingsSection === "system" ? (
+                <div className="settings-section-grid">
+                  <section className="card settings-card settings-wide-card">
+                    <div className="card-header">
+                      <div>
+                        <h2>System/Admin</h2>
+                        <span className="muted">Administrative tools for maintenance, export, and debugging.</span>
+                      </div>
+                    </div>
+                    <div className="card-body">
+                      <div className="settings-admin-token-row">
+                        <label className="field">
+                          <span>Admin token</span>
+                          <input
+                            type="password"
+                            value={adminTokenDraft}
+                            onChange={(event) => setAdminTokenDraft(event.target.value)}
+                            placeholder="Required for protected admin actions"
+                            autoComplete="off"
+                          />
+                        </label>
+                        <button className="btn" type="button" onClick={handleSaveAdminTokenDraft}>
+                          Save token
+                        </button>
+                        <button className="btn btn-secondary" type="button" onClick={handleClearAdminTokenDraft}>
+                          Clear
+                        </button>
+                      </div>
+                      <p className="muted">Required for protected admin actions. The token is stored in this browser session.</p>
+                    </div>
+                  </section>
+                  <section className="card settings-card settings-wide-card">
+                    <div className="card-header">
+                      <h2>Service Controls</h2>
+                    </div>
+                    <div className="card-body">
+                      {pollerError ? <div className="error">{pollerError}</div> : null}
+                      {pollerStatus ? (
+                        <SettingsMetaGrid
+                          items={[
+                            ["Status", scannerStatusLabel],
+                            ["Mode", pollerStatus.mode ?? "-"],
+                            ["Last tick", formatTimestamp(pollerStatus.last_tick_at)],
+                            ["Last error", pollerStatus.last_error || "-"]
+                          ]}
+                        />
+                      ) : (
+                        <LoadingSkeleton label="Loading service controls" rows={3} />
+                      )}
+                      <div className="settings-chip-row">
+                        <button
+                          className="btn btn-small btn-success"
+                          type="button"
+                          onClick={() => handleSetPollerMode("run")}
+                          disabled={!pollerStatus || pollerStatus.mode === "run"}
+                        >
+                          Run
+                        </button>
+                        <button
+                          className="btn btn-small btn-warning"
+                          type="button"
+                          onClick={() => handleSetPollerMode("pause_new")}
+                          disabled={!pollerStatus || pollerStatus.mode === "pause_new"}
+                        >
+                          Pause New
+                        </button>
+                        <button
+                          className="btn btn-small btn-danger"
+                          type="button"
+                          onClick={() => handleSetPollerMode("pause_all")}
+                          disabled={!pollerStatus || pollerStatus.mode === "pause_all"}
+                        >
+                          Pause All
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                  <section className="card settings-card settings-wide-card">
+                    <div className="card-header">
+                      <h2>Advanced / Debug</h2>
+                    </div>
+                    <div className="card-body">
+                      {watchlist ? (
+                        <pre>{JSON.stringify(watchlist, null, 2)}</pre>
+                      ) : (
+                        <EmptyState title="No system tools available">
+                          Admin tools will appear here when enabled by the backend.
+                        </EmptyState>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </>
       ) : null}
 
       {showDashboard || showReplay ? (
-      <section className="card">
+      <section className={`card ${showDashboard ? "chart-workspace-card" : "replay-chart-card"}`}>
         <h2>Chart Workspace</h2>
         {chartError ? <div className="error">{chartError}</div> : null}
         <div className="chart-toolbar">
@@ -2417,8 +3175,8 @@ export default function DashboardPage({ view = "dashboard" }) {
       ) : null}
 
       {showDashboard ? (
-      <section className="card">
-        <h2>Alert Review</h2>
+      <section className="card live-alert-stream-card">
+        <h2>Live Alert Stream</h2>
         <div className="tabs">
           <button
             className={`tab ${alertsTab === "history" ? "active" : ""}`}
@@ -2560,19 +3318,27 @@ export default function DashboardPage({ view = "dashboard" }) {
               </div>
             </div>
             {filteredAlerts.length === 0 ? (
-              <p className="empty-state">No alerts found. Adjust filters or increase the date range.</p>
+              <EmptyState title="No live alerts yet">
+                Your scanner is online. New signals will appear here when strategy conditions are met.
+              </EmptyState>
             ) : (
               <div className="table-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th>Time</th>
-                      <th>Symbol / TF</th>
-                      <th>Type / Dir</th>
-                      <th>Level</th>
-                      <th>Entry / SL</th>
-                      <th>Score</th>
                       <th>Status</th>
+                      <th>Severity</th>
+                      <th>Time</th>
+                      <th>Symbol</th>
+                      <th>TF</th>
+                      <th>Direction</th>
+                      <th>Strategy</th>
+                      <th>Entry</th>
+                      <th>SL</th>
+                      <th>TP</th>
+                      <th>S/R</th>
+                      <th>Confidence</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2582,19 +3348,27 @@ export default function DashboardPage({ view = "dashboard" }) {
                         className="clickable"
                         onClick={() => handleAlertRowClick(alert.id)}
                       >
+                        <td>
+                          <StatusBadge tone={getAlertStatusTone(alert)}>{getAlertStatusLabel(alert)}</StatusBadge>
+                        </td>
+                        <td>
+                          <SeverityBadge severity={getAlertSeverity(alert)} />
+                        </td>
                         <td>{alert.created_at ? new Date(alert.created_at).toLocaleString() : "-"}</td>
+                        <td>{alert.symbol}</td>
+                        <td>{alert.tf}</td>
                         <td>
-                          {alert.symbol} / {alert.tf}
+                          <StatusBadge tone={alert.direction === "long" ? "success" : alert.direction === "short" ? "danger" : "muted"}>
+                            {alert.direction ?? "-"}
+                          </StatusBadge>
                         </td>
+                        <td>{alert.type ?? alert.payload?.strategy?.id ?? "-"}</td>
+                        <td>{formatNumber(alert.entry)}</td>
+                        <td>{formatNumber(alert.sl)}</td>
+                        <td>{formatNumber(getAlertTakeProfit(alert))}</td>
+                        <td>{formatNumber(alert.level)}</td>
                         <td>
-                          {alert.type} / {alert.direction}
-                        </td>
-                        <td>{alert.level ?? "-"}</td>
-                        <td>
-                          {alert.entry ?? "-"} / {alert.sl ?? "-"}
-                        </td>
-                        <td>
-                          {alert.score ?? "-"}
+                          {formatAlertConfidence(alert)}
                           {alert.vol_ok !== undefined ? (
                             <span className={`badge ${alert.vol_ok ? "ok" : "bad"}`}>VOL</span>
                           ) : null}
@@ -2602,7 +3376,30 @@ export default function DashboardPage({ view = "dashboard" }) {
                             <span className={`badge ${alert.di_ok ? "ok" : "bad"}`}>DI</span>
                           ) : null}
                         </td>
-                        <td>{formatAlertStatus(alert)}</td>
+                        <td>
+                          <div className="row-actions">
+                            <button
+                              className="btn btn-small"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleAlertRowClick(alert.id);
+                              }}
+                            >
+                              Open
+                            </button>
+                            <button
+                              className="btn btn-small btn-secondary"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                window.location.assign("/replay");
+                              }}
+                            >
+                              Replay
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -2739,9 +3536,401 @@ export default function DashboardPage({ view = "dashboard" }) {
       </section>
       ) : null}
 
+      {showDashboard ? (
+        <>
+          <section className="card signals-side-card signal-intelligence-card">
+            <h2>Signal Intelligence</h2>
+            <div className="intel-stack">
+              <div className="intel-row">
+                <span>Direction</span>
+                <StatusBadge tone={latestAlert?.direction === "long" ? "success" : latestAlert?.direction === "short" ? "danger" : "muted"}>
+                  {latestAlert?.direction ?? chartDetails?.direction ?? "-"}
+                </StatusBadge>
+              </div>
+              <div className="intel-row">
+                <span>Setup quality</span>
+                <strong>{formatAlertConfidence(latestAlert)}</strong>
+              </div>
+              <div className="intel-row">
+                <span>ADX</span>
+                <strong>{formatNumber(chartDiPeak?.adx14_last)}</strong>
+              </div>
+              <div className="intel-row">
+                <span>DI+ / DI-</span>
+                <strong>
+                  {formatNumber(chartDiPeak?.di_plus?.last)} / {formatNumber(chartDiPeak?.di_minus?.last)}
+                </strong>
+              </div>
+              <div className="intel-row">
+                <span>Volume ratio</span>
+                <strong>{formatNumber(chartVol?.vol_ratio)}</strong>
+              </div>
+              <div className="intel-row">
+                <span>Pullback / fake volume</span>
+                <strong>
+                  {String(chartVol?.pullback_vol_decline ?? "-")} / {String(latestAlert?.vol_ok ?? "-")}
+                </strong>
+              </div>
+              <div className="intel-row">
+                <span>Key S/R level</span>
+                <strong>{formatNumber(keyLevel)}</strong>
+              </div>
+            </div>
+          </section>
+
+          <section className="card signals-side-card bot-status-card">
+            <h2>Bot Status</h2>
+            <div className="intel-stack">
+              <div className="intel-row">
+                <span>Status</span>
+                <StatusBadge tone={scannerStatusTone}>{scannerStatusLabel}</StatusBadge>
+              </div>
+              <div className="intel-row">
+                <span>Last heartbeat</span>
+                <strong>{formatTimestamp(pollerStatus?.last_tick_at)}</strong>
+              </div>
+              <div className="intel-row">
+                <span>Latency</span>
+                <strong>-</strong>
+              </div>
+              <div className="intel-row">
+                <span>Symbols monitored</span>
+                <strong>{watchlistItems.length || symbols.length || "-"}</strong>
+              </div>
+              <div className="intel-row">
+                <span>Active timeframes</span>
+                <strong>{activeTimeframes.length > 0 ? activeTimeframes.join(", ") : "-"}</strong>
+              </div>
+              <div className="intel-row">
+                <span>Errors last hour</span>
+                <strong className={alertErrors > 0 ? "error-text" : ""}>{alertErrors}</strong>
+              </div>
+            </div>
+          </section>
+
+          <section className="card signals-side-card sr-summary-card">
+            <h2>Active S/R Summary</h2>
+            <div className="sr-summary">
+              <div>
+                <span>Support levels</span>
+                <strong>{supportLevels.length > 0 ? supportLevels.map((level) => formatNumber(level.center)).join(", ") : "-"}</strong>
+              </div>
+              <div>
+                <span>Resistance levels</span>
+                <strong>{resistanceLevels.length > 0 ? resistanceLevels.map((level) => formatNumber(level.center)).join(", ") : "-"}</strong>
+              </div>
+              <div>
+                <span>Source timeframe</span>
+                <strong>{levels?.htf_timeframe ?? "-"}</strong>
+              </div>
+              <div>
+                <span>Last updated</span>
+                <strong>{lastSyncTime ? formatTimestamp(lastSyncTime) : "-"}</strong>
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
+
       {showOps ? (
+        <>
+          <PageHeader
+            title="System Health"
+            eyebrow="Operations"
+            actions={
+              <>
+                <button className="btn btn-secondary" type="button" onClick={handleRefreshSettings}>
+                  Refresh
+                </button>
+                <button className="btn btn-secondary" type="button" onClick={handleSendTelegramTest}>
+                  Test Telegram Alert
+                </button>
+              </>
+            }
+          >
+            Monitor scanner uptime, integrations, service status, and operational logs.
+          </PageHeader>
+
+          {pollerError ? (
+            <ErrorState title="Could not load system health" onRetry={handleRefreshSettings} onViewLogs={() => setOpsLogLevel("ERROR")}>
+              Check the bot service status or retry the request.
+            </ErrorState>
+          ) : null}
+
+          <div className="metric-strip ops-status-strip">
+            <MetricCard label="Scanner status" value={<StatusBadge tone={scannerStatusTone}>{scannerStatusLabel}</StatusBadge>} />
+            <MetricCard label="Last heartbeat" value={formatTimestamp(pollerStatus?.last_tick_at)} />
+            <MetricCard label="API latency" value="-" />
+            <MetricCard label="Binance connection" value={<StatusBadge tone={pollerStatus?.is_running ? "success" : "muted"}>{pollerStatus?.is_running ? "Connected" : "Unknown"}</StatusBadge>} />
+            <MetricCard label="Telegram status" value={<StatusBadge tone={telegramSettings?.enabled ? "success" : "muted"}>{telegramSettings?.enabled ? "Connected" : "Disabled"}</StatusBadge>} />
+            <MetricCard label="Errors last hour" value={alertErrors} tone={alertErrors > 0 ? "danger" : "default"} />
+            <MetricCard label="Queue depth" value="-" />
+            <MetricCard label="Last sync" value={lastSyncTime ? new Date(lastSyncTime).toLocaleTimeString() : "-"} />
+          </div>
+
+          <div className="ops-dashboard-grid">
+            <main className="ops-main-column">
+              <section className="card ops-service-card">
+                <div className="card-header">
+                  <div>
+                    <h2>Service Status</h2>
+                    <span className="muted">Scanner, integrations, storage, and worker health.</span>
+                  </div>
+                </div>
+                <div className="card-body">
+                  {pollerStatus ? (
+                    <div className="table-wrap ops-service-table">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Service</th>
+                            <th>Status</th>
+                            <th>Last checked</th>
+                            <th>Latency</th>
+                            <th>Errors</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {serviceRows.map((service) => (
+                            <tr key={service.name}>
+                              <td>
+                                <strong>{service.name}</strong>
+                                <span className="ops-service-subtitle">{service.description}</span>
+                              </td>
+                              <td><StatusBadge tone={service.tone}>{service.status}</StatusBadge></td>
+                              <td>{service.lastChecked}</td>
+                              <td>{service.latency}</td>
+                              <td className={Number(service.errors) > 0 ? "error-text" : ""}>{service.errors}</td>
+                              <td>
+                                <div className="row-actions">
+                                  {service.action === "telegram" ? (
+                                    <button className="btn btn-small btn-secondary" type="button" onClick={handleSendTelegramTest}>
+                                      Test
+                                    </button>
+                                  ) : service.action === "logs" ? (
+                                    <button className="btn btn-small btn-secondary" type="button" onClick={() => setOpsLogSource(service.sourceFilter)}>
+                                      Open logs
+                                    </button>
+                                  ) : (
+                                    <button className="btn btn-small btn-secondary" type="button" onClick={handleRefreshSettings}>
+                                      Retry
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <LoadingSkeleton label="Loading service status" rows={6} />
+                  )}
+                </div>
+              </section>
+
+              <section className="card ops-logs-card">
+                <div className="card-header ops-logs-header">
+                  <div>
+                    <h2>Operational Logs</h2>
+                    <span className="muted">{filteredOperationalLogs.length} events visible</span>
+                  </div>
+                  <div className="ops-log-filters">
+                    <input
+                      type="search"
+                      value={opsLogSearch}
+                      onChange={(event) => setOpsLogSearch(event.target.value)}
+                      placeholder="Search logs"
+                    />
+                    <select value={opsLogLevel} onChange={(event) => setOpsLogLevel(event.target.value)}>
+                      <option value="all">All levels</option>
+                      <option value="DEBUG">DEBUG</option>
+                      <option value="INFO">INFO</option>
+                      <option value="WARN">WARN</option>
+                      <option value="ERROR">ERROR</option>
+                      <option value="CRITICAL">CRITICAL</option>
+                    </select>
+                    <select value={opsLogSource} onChange={(event) => setOpsLogSource(event.target.value)}>
+                      {opsLogSources.map((source) => (
+                        <option key={`ops-source-${source}`} value={source}>
+                          {source === "all" ? "All sources" : source}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="btn btn-small btn-secondary" type="button" onClick={handleRefreshSettings}>
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+                <div className="card-body">
+                  {filteredOperationalLogs.length > 0 ? (
+                    <div className="table-wrap ops-log-table">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Time</th>
+                            <th>Level</th>
+                            <th>Source</th>
+                            <th>Symbol</th>
+                            <th>Message</th>
+                            <th>Trace / ID</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredOperationalLogs.map((log) => (
+                            <tr key={log.id} className="clickable" onClick={() => setOpsSelectedLog(log)}>
+                              <td className="mono-cell">{formatTimestamp(log.time)}</td>
+                              <td><LogLevelBadge level={log.level} /></td>
+                              <td>{log.source}</td>
+                              <td>{log.symbol ?? "-"}</td>
+                              <td className="ops-log-message">{log.message}</td>
+                              <td className="mono-cell">{log.traceId ?? "-"}</td>
+                              <td>
+                                <button className="btn btn-small btn-ghost" type="button" onClick={(event) => {
+                                  event.stopPropagation();
+                                  setOpsSelectedLog(log);
+                                }}>
+                                  Details
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <EmptyState
+                      title="No logs found"
+                      actions={
+                        <button className="btn btn-small btn-secondary" type="button" onClick={() => {
+                          setOpsLogSearch("");
+                          setOpsLogLevel("all");
+                          setOpsLogSource("all");
+                        }}>
+                          Clear filters
+                        </button>
+                      }
+                    >
+                      No operational events match the current filters.
+                    </EmptyState>
+                  )}
+                  {opsSelectedLog ? (
+                    <div className="drawer ops-log-detail">
+                      <div className="drawer-header">
+                        <strong>Log Detail</strong>
+                        <button className="btn btn-small btn-secondary" type="button" onClick={() => setOpsSelectedLog(null)}>
+                          Close
+                        </button>
+                      </div>
+                      <div className="drawer-meta">
+                        <span>{formatTimestamp(opsSelectedLog.time)}</span>
+                        <LogLevelBadge level={opsSelectedLog.level} />
+                        <span>{opsSelectedLog.source}</span>
+                        <span>{opsSelectedLog.symbol ?? "-"}</span>
+                      </div>
+                      <p className="ops-log-detail-message">{opsSelectedLog.message}</p>
+                      <details>
+                        <summary>Advanced details</summary>
+                        <pre>{JSON.stringify(opsSelectedLog.raw ?? opsSelectedLog, null, 2)}</pre>
+                      </details>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            </main>
+
+            <aside className="ops-side-column">
+              <section className="card ops-side-card">
+                <div className="card-header">
+                  <h2>Connection Health</h2>
+                </div>
+                <div className="card-body">
+                  <div className="ops-connection-list">
+                    <ConnectionHealthRow name="Binance" tone={pollerStatus?.is_running ? "success" : "muted"} status={pollerStatus?.is_running ? "Connected" : "Unknown"} detail={`Last scan ${formatTimestamp(pollerStatus?.last_scan_at)}`} />
+                    <ConnectionHealthRow name="Telegram" tone={telegramSettings?.enabled ? "success" : "muted"} status={telegramSettings?.enabled ? "Connected" : "Disabled"} detail={telegramSettings?.has_bot_token ? "Bot token configured" : "No bot token saved"} action={<button className="btn btn-small btn-secondary" type="button" onClick={handleSendTelegramTest}>Test</button>} />
+                    <ConnectionHealthRow name="Webhook" tone="muted" status="Not configured" detail="No webhook controls exposed by backend" />
+                    <ConnectionHealthRow name="Internal API" tone="success" status="Healthy" detail="Health endpoint available" />
+                    <ConnectionHealthRow name="Storage" tone="success" status="Available" detail="Alert and journal APIs responding" />
+                  </div>
+                </div>
+              </section>
+
+              <section className="card ops-side-card">
+                <div className="card-header">
+                  <h2>Recent Incidents</h2>
+                </div>
+                <div className="card-body">
+                  {incidentLogs.length > 0 ? (
+                    <div className="ops-incident-list">
+                      {incidentLogs.map((log) => (
+                        <button className="ops-incident-item" key={`incident-${log.id}`} type="button" onClick={() => setOpsSelectedLog(log)}>
+                          <LogLevelBadge level={log.level} />
+                          <strong>{log.source}</strong>
+                          <span>{log.message}</span>
+                          <small>{formatTimestamp(log.time)}</small>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState title="No recent errors">
+                      The scanner has not reported warnings or errors in the selected time range.
+                    </EmptyState>
+                  )}
+                </div>
+              </section>
+
+              <section className="card ops-side-card">
+                <div className="card-header">
+                  <h2>Admin / Maintenance</h2>
+                </div>
+                <div className="card-body">
+                  <div className="settings-admin-token-row ops-admin-token-row">
+                    <label className="field">
+                      <span>Admin token</span>
+                      <input
+                        type="password"
+                        value={adminTokenDraft}
+                        onChange={(event) => setAdminTokenDraft(event.target.value)}
+                        placeholder="Required for protected admin actions"
+                        autoComplete="off"
+                      />
+                    </label>
+                    <button className="btn btn-small" type="button" onClick={handleSaveAdminTokenDraft}>
+                      Save
+                    </button>
+                    <button className="btn btn-small btn-secondary" type="button" onClick={handleClearAdminTokenDraft}>
+                      Clear
+                    </button>
+                  </div>
+                  <div className="ops-maintenance-actions">
+                    <button className="btn btn-small btn-success" type="button" onClick={() => handleSetPollerMode("run")} disabled={!pollerStatus || pollerStatus.mode === "run"}>
+                      Run scanner
+                    </button>
+                    <button className="btn btn-small btn-warning" type="button" onClick={() => handleSetPollerMode("pause_new")} disabled={!pollerStatus || pollerStatus.mode === "pause_new"}>
+                      Pause new alerts
+                    </button>
+                    <button className="btn btn-small btn-danger" type="button" onClick={() => handleSetPollerMode("pause_all")} disabled={!pollerStatus || pollerStatus.mode === "pause_all"}>
+                      Pause all
+                    </button>
+                    <button className="btn btn-small btn-secondary" type="button" onClick={handleSendTelegramTest}>
+                      Test Telegram Alert
+                    </button>
+                  </div>
+                  {telegramFeedback ? (
+                    <span className={telegramFeedback.ok ? "settings-feedback" : "error-text"}>{telegramFeedback.message}</span>
+                  ) : null}
+                </div>
+              </section>
+            </aside>
+          </div>
+        </>
+      ) : null}
+
+      {false && showOps ? (
       <section className="card">
-        <h2>Operator</h2>
+        <h2>System Health</h2>
         {pollerError ? <div className="error">{pollerError}</div> : null}
         {pollerStatus ? (
           <div className="bias-grid">
@@ -2873,7 +4062,7 @@ export default function DashboardPage({ view = "dashboard" }) {
             placeholder="Test message (optional)"
           />
           <button className="btn" type="button" onClick={handleSendTelegramTest}>
-            Send Test Telegram
+            Test Telegram Alert
           </button>
         </div>
         {telegramFeedback ? (
@@ -2882,9 +4071,9 @@ export default function DashboardPage({ view = "dashboard" }) {
       </section>
       ) : null}
 
-      {showOps ? (
+      {false && showOps ? (
       <section className="card">
-        <h2>Quality</h2>
+        <h2>Alert Quality</h2>
         {qualityError ? <div className="error">{qualityError}</div> : null}
         {qualitySettings ? (
           <div className="levels-grid">
@@ -3075,13 +4264,13 @@ export default function DashboardPage({ view = "dashboard" }) {
           <p className="muted">Loading quality settings...</p>
         )}
         <button className="btn" type="button" onClick={handleSaveQuality}>
-          Save Quality Settings
+          Save Alert Settings
         </button>
         {qualitySaveStatus ? <p className="muted">{qualitySaveStatus}</p> : null}
       </section>
       ) : null}
 
-      {showDashboard ? (
+      {showLegacyDashboardSections ? (
       <section className="card">
         <h2>Watchlist</h2>
         {watchlist ? (
@@ -3092,7 +4281,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       </section>
       ) : null}
 
-      {showDashboard ? (
+      {showLegacyDashboardSections ? (
       <section className="card">
         <h2>Indicator Snapshot</h2>
         {indicatorError ? <div className="error">{indicatorError}</div> : null}
@@ -3129,82 +4318,122 @@ export default function DashboardPage({ view = "dashboard" }) {
       </section>
       ) : null}
 
-      {showDashboard || showLevels ? (
-      <section className="card">
-        <h2>Active S/R Levels</h2>
-        {levelsError ? <div className="error">{levelsError}</div> : null}
-        <label className="field">
-          <span>Symbol</span>
-          <select value={selectedSymbol} onChange={(event) => setSelectedSymbol(event.target.value)}>
-            {symbols.map((symbol) => (
-              <option key={symbol} value={symbol}>
-                {symbol}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>Entry TF</span>
-          <select value={levelsEntryTf} onChange={(event) => setLevelsEntryTf(event.target.value)}>
-            <option value="15m">15m uses 4H S/R</option>
-            <option value="1h">1h uses Daily S/R</option>
-          </select>
-        </label>
-        {levels ? (
-          <div className="levels-grid">
-            <div>
-              <h3>Detected Pattern Levels</h3>
-              <p className="muted">
-                HTF: {levels.htf_timeframe ?? "-"} | lookback: {levels.lookback_window ?? "-"} | last HTF close:{" "}
-                {formatNumber(levels.last_close_used)}
-              </p>
-              <DetailedLevelList items={levels.final_levels_detailed} emptyLabel="No active S/R levels yet." />
-            </div>
-            <div>
-              <h3>Effective Prices</h3>
-              <LevelList items={levels.final_levels} emptyLabel="No final levels yet." />
-            </div>
-            <div>
-              <h3>Pinned Levels</h3>
-              <div className="inline-form">
-                <input
-                  type="number"
-                  value={pinnedInput}
-                  onChange={(event) => setPinnedInput(event.target.value)}
-                  placeholder="Add pinned level"
-                />
-                <button className="btn" type="button" onClick={handleAddPinned}>
-                  Add
-                </button>
+      {showLevels ? (
+        <>
+          <section className="card levels-effective-card">
+            <h2>Effective Levels</h2>
+            {levelsError ? (
+              <ErrorState
+                title="Could not load S/R levels"
+                onRetry={handleRefreshLevels}
+                onViewLogs={() => window.location.assign("/ops")}
+              >
+                Check the scanner status or retry the request.
+              </ErrorState>
+            ) : null}
+            {!levels && !levelsError ? <LoadingSkeleton label="Loading effective levels" rows={5} /> : null}
+            {levels && effectiveLevels.length === 0 ? (
+              <EmptyState
+                title="No effective levels"
+                actions={
+                  <button className="btn btn-small" type="button" onClick={handleRefreshLevels}>
+                    Refresh
+                  </button>
+                }
+              >
+                No detected or pinned levels are currently active for this selection.
+              </EmptyState>
+            ) : null}
+            {levels && effectiveLevels.length > 0 ? (
+              <div className="level-card-list">
+                {effectiveLevels.map((level) => (
+                  <LevelCard
+                    key={level.id}
+                    level={level}
+                    onRemovePinned={handleRemovePinned}
+                    onRemoveDisabled={handleRemoveDisabled}
+                  />
+                ))}
               </div>
-              <EditableList items={getOverrides(watchlist, selectedSymbol, "add")} onRemove={handleRemovePinned} />
-            </div>
-            <div>
-              <h3>Disabled Levels</h3>
-              <div className="inline-form">
-                <input
-                  type="number"
-                  value={disabledInput}
-                  onChange={(event) => setDisabledInput(event.target.value)}
-                  placeholder="Disable level"
-                />
-                <button className="btn" type="button" onClick={handleAddDisabled}>
-                  Add
-                </button>
+            ) : null}
+          </section>
+
+          <section className="card levels-detected-card">
+            <h2>Detected Pattern Levels</h2>
+            {levels ? (
+              <div className="levels-meta-grid">
+                <div>
+                  <span>HTF source</span>
+                  <strong>{levels.htf_timeframe ?? "-"}</strong>
+                </div>
+                <div>
+                  <span>Lookback</span>
+                  <strong>{levels.lookback_window ?? "-"}</strong>
+                </div>
+                <div>
+                  <span>Last HTF close</span>
+                  <strong>{formatNumber(levels.last_close_used)}</strong>
+                </div>
               </div>
-              <EditableList items={getOverrides(watchlist, selectedSymbol, "disable")} onRemove={handleRemoveDisabled} />
+            ) : null}
+            {!levels && !levelsError ? <LoadingSkeleton label="Loading detected levels" rows={4} /> : null}
+            {levels && (!Array.isArray(levels.final_levels_detailed) || levels.final_levels_detailed.length === 0) ? (
+              <EmptyState
+                title="No pattern levels detected"
+                actions={
+                  <button className="btn btn-small" type="button" onClick={handleRefreshLevels}>
+                    Refresh
+                  </button>
+                }
+              >
+                The scanner has not detected active support or resistance levels for this symbol and timeframe yet.
+              </EmptyState>
+            ) : null}
+            {levels && Array.isArray(levels.final_levels_detailed) && levels.final_levels_detailed.length > 0 ? (
+              <div className="level-card-list">
+                {levels.final_levels_detailed.map((level, idx) => (
+                  <LevelCard key={`${level.role}-${level.center}-${idx}`} level={normalizeDetectedLevel(level, levels)} />
+                ))}
+              </div>
+            ) : null}
+          </section>
+
+          <section className="card levels-overrides-card">
+            <h2>Override Controls</h2>
+            <OverridePanel
+              title="Pinned Levels"
+              value={pinnedInput}
+              onChange={setPinnedInput}
+              onAdd={handleAddPinned}
+              items={pinnedLevels}
+              onRemove={handleRemovePinned}
+              placeholder="Add pinned level"
+              tone="pinned"
+            />
+            <OverridePanel
+              title="Disabled Levels"
+              value={disabledInput}
+              onChange={setDisabledInput}
+              onAdd={handleAddDisabled}
+              items={disabledLevels}
+              onRemove={handleRemoveDisabled}
+              placeholder="Disable level"
+              tone="disabled"
+            />
+          </section>
+
+          <section className="card levels-rules-card">
+            <h2>Level Rules</h2>
+            <div className="level-rules-list">
+              <p>Entry timeframes use higher-timeframe S/R where configured.</p>
+              <p>Pinned levels are manually forced into effective levels.</p>
+              <p>Disabled levels are excluded from scanner decisions.</p>
             </div>
-          </div>
-        ) : (
-          <p className="muted">Loading levels...</p>
-        )}
-        <button className="btn" type="button" onClick={handleSaveLevels}>
-          Save Overrides
-        </button>
-      </section>
+          </section>
+        </>
       ) : null}
 
-      {showDashboard ? (
+      {showLegacyDashboardSections ? (
       <section className="card">
         <h2>DI Peak</h2>
         {diPeakError ? <div className="error">{diPeakError}</div> : null}
@@ -3269,7 +4498,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       </section>
       ) : null}
 
-      {showDashboard ? (
+      {showLegacyDashboardSections ? (
       <section className="card">
         <h2>Volume</h2>
         {volError ? <div className="error">{volError}</div> : null}
@@ -3317,7 +4546,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       </section>
       ) : null}
 
-      {showDashboard ? (
+      {showLegacyDashboardSections ? (
       <section className="card">
         <h2>RSI / ATR</h2>
         {rsiError ? <div className="error">{rsiError}</div> : null}
@@ -3372,7 +4601,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       </section>
       ) : null}
 
-      {showDashboard ? (
+      {showLegacyDashboardSections ? (
       <section className="card">
         <h2>Level Events</h2>
         {levelEventsError ? <div className="error">{levelEventsError}</div> : null}
@@ -3433,7 +4662,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       </section>
       ) : null}
 
-      {showDashboard ? (
+      {showLegacyDashboardSections ? (
       <section className="card">
         <h2>Setup Candles</h2>
         {setupError ? <div className="error">{setupError}</div> : null}
@@ -3496,7 +4725,7 @@ export default function DashboardPage({ view = "dashboard" }) {
       </section>
       ) : null}
 
-      {showDashboard ? (
+      {showLegacyDashboardSections ? (
       <section className="card">
         <h2>Openings</h2>
         {openingsError ? <div className="error">{openingsError}</div> : null}
@@ -3604,6 +4833,251 @@ export default function DashboardPage({ view = "dashboard" }) {
       ) : null}
     </div>
   );
+}
+
+function SettingsRail({ sections, active, onSelect }) {
+  return (
+    <nav className="settings-rail" aria-label="Settings sections">
+      {sections.map(([id, label, description]) => (
+        <button
+          key={id}
+          className={`settings-rail-item ${active === id ? "active" : ""}`}
+          type="button"
+          onClick={() => onSelect(id)}
+        >
+          <strong>{label}</strong>
+          <span>{description}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function SettingsMetaGrid({ items }) {
+  return (
+    <div className="settings-meta-grid">
+      {items.map(([label, value]) => (
+        <div key={label}>
+          <span>{label}</span>
+          <strong>{value === null || value === undefined || value === "" ? "-" : value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SettingsInfoCard({ title, items }) {
+  return (
+    <section className="card settings-card">
+      <div className="card-header">
+        <h2>{title}</h2>
+      </div>
+      <div className="card-body">
+        <SettingsMetaGrid items={items} />
+      </div>
+    </section>
+  );
+}
+
+function SettingsFieldGroup({ title, children }) {
+  return (
+    <div className="settings-field-group">
+      <h3>{title}</h3>
+      <div className="settings-field-list">{children}</div>
+    </div>
+  );
+}
+
+function SettingsIntegrationCard({ name, status, description, action }) {
+  return (
+    <section className="card settings-card">
+      <div className="card-header">
+        <div>
+          <h2>{name}</h2>
+          <span className="muted">{description}</span>
+        </div>
+        <StatusBadge tone={status === "Configured" ? "success" : "muted"}>{status}</StatusBadge>
+      </div>
+      {action ? <div className="card-body">{action}</div> : null}
+    </section>
+  );
+}
+
+function LogLevelBadge({ level }) {
+  const normalized = String(level || "INFO").toUpperCase();
+  const tone =
+    normalized === "ERROR" || normalized === "CRITICAL"
+      ? "danger"
+      : normalized === "WARN" || normalized === "WARNING"
+        ? "warning"
+        : normalized === "INFO"
+          ? "primary"
+          : "muted";
+  return <StatusBadge tone={tone}>{normalized}</StatusBadge>;
+}
+
+function ConnectionHealthRow({ name, status, tone, detail, action }) {
+  return (
+    <div className="ops-connection-row">
+      <div>
+        <strong>{name}</strong>
+        <span>{detail}</span>
+      </div>
+      <StatusBadge tone={tone}>{status}</StatusBadge>
+      {action ? <div>{action}</div> : null}
+    </div>
+  );
+}
+
+function buildOperationalLogs({ pollerStatus, suppressed, alertsItems }) {
+  const logs = [];
+  if (pollerStatus?.last_error) {
+    logs.push({
+      id: "poller-last-error",
+      time: pollerStatus.last_tick_at ?? Date.now(),
+      level: "ERROR",
+      source: "Scanner",
+      symbol: null,
+      message: pollerStatus.last_error,
+      traceId: pollerStatus.mode ?? "poller",
+      raw: pollerStatus
+    });
+  }
+  (Array.isArray(alertsItems) ? alertsItems : [])
+    .filter((alert) => alert?.notify_error)
+    .forEach((alert, index) => {
+      logs.push({
+        id: `alert-notify-${alert.id ?? index}`,
+        time: alert.time ?? alert.created_at ?? Date.now(),
+        level: "ERROR",
+        source: "Telegram",
+        symbol: alert.symbol,
+        message: alert.notify_error,
+        traceId: alert.id ?? alert.signal_id ?? "-",
+        raw: alert
+      });
+    });
+  (Array.isArray(suppressed) ? suppressed : []).forEach((item, index) => {
+    logs.push({
+      id: `suppressed-${item.time ?? index}-${item.symbol ?? "unknown"}`,
+      time: item.time ?? Date.now(),
+      level: "WARN",
+      source: "Alert Quality",
+      symbol: item.symbol,
+      message: `${item.reason ?? "Suppressed alert"}${Array.isArray(item.details) && item.details.length ? `: ${item.details.join("; ")}` : ""}`,
+      traceId: `${item.type ?? "signal"}:${item.tf ?? "-"}`,
+      raw: item
+    });
+  });
+  if (logs.length === 0 && pollerStatus) {
+    logs.push({
+      id: "scanner-heartbeat",
+      time: pollerStatus.last_tick_at ?? Date.now(),
+      level: "INFO",
+      source: "Scanner",
+      symbol: null,
+      message: "Scanner heartbeat received.",
+      traceId: pollerStatus.mode ?? "poller",
+      raw: pollerStatus
+    });
+  }
+  return logs.sort((a, b) => Number(b.time ?? 0) - Number(a.time ?? 0));
+}
+
+function buildServiceRows({
+  pollerStatus,
+  telegramSettings,
+  scannerStatusLabel,
+  scannerStatusTone,
+  lastSyncTime,
+  alertErrors,
+  symbolsCount
+}) {
+  return [
+    {
+      name: "Scanner",
+      description: `${symbolsCount || "-"} symbols monitored`,
+      status: scannerStatusLabel,
+      tone: scannerStatusTone,
+      lastChecked: formatTimestamp(pollerStatus?.last_tick_at),
+      latency: "-",
+      errors: pollerStatus?.last_error ? 1 : 0,
+      action: "logs",
+      sourceFilter: "Scanner"
+    },
+    {
+      name: "Binance data stream",
+      description: "Market data and candle ingestion",
+      status: pollerStatus?.is_running ? "Connected" : "Unknown",
+      tone: pollerStatus?.is_running ? "success" : "muted",
+      lastChecked: formatTimestamp(pollerStatus?.last_scan_at),
+      latency: "-",
+      errors: 0,
+      action: "retry"
+    },
+    {
+      name: "Alert worker",
+      description: "Signal evaluation and notification dispatch",
+      status: pollerStatus?.mode === "pause_all" ? "Paused" : pollerStatus?.mode === "pause_new" ? "Delayed" : "Healthy",
+      tone: pollerStatus?.mode === "pause_all" || pollerStatus?.mode === "pause_new" ? "warning" : "success",
+      lastChecked: formatTimestamp(lastSyncTime),
+      latency: "-",
+      errors: alertErrors,
+      action: "logs",
+      sourceFilter: "Alert Quality"
+    },
+    {
+      name: "Telegram",
+      description: "Alert delivery channel",
+      status: telegramSettings?.enabled ? "Connected" : "Disabled",
+      tone: telegramSettings?.enabled ? "success" : "muted",
+      lastChecked: "-",
+      latency: "-",
+      errors: 0,
+      action: "telegram"
+    },
+    {
+      name: "Webhook",
+      description: "External webhook delivery",
+      status: "Not configured",
+      tone: "muted",
+      lastChecked: "-",
+      latency: "-",
+      errors: 0,
+      action: "retry"
+    },
+    {
+      name: "Database / storage",
+      description: "Alerts, journal, and settings persistence",
+      status: "Available",
+      tone: "success",
+      lastChecked: formatTimestamp(lastSyncTime),
+      latency: "-",
+      errors: 0,
+      action: "retry"
+    },
+    {
+      name: "Scheduler",
+      description: "Poller loop and timed refresh",
+      status: pollerStatus?.is_running ? "Healthy" : "Disconnected",
+      tone: pollerStatus?.is_running ? "success" : "danger",
+      lastChecked: formatTimestamp(pollerStatus?.last_tick_at),
+      latency: "-",
+      errors: pollerStatus?.last_error ? 1 : 0,
+      action: "logs",
+      sourceFilter: "Scanner"
+    },
+    {
+      name: "Paper trading engine",
+      description: "Forward test processing",
+      status: "Available",
+      tone: "success",
+      lastChecked: formatTimestamp(lastSyncTime),
+      latency: "-",
+      errors: 0,
+      action: "retry"
+    }
+  ];
 }
 
 function latestValue(series) {
@@ -4012,6 +5486,108 @@ function formatAlertStatus(alert) {
   return "Pending";
 }
 
+function getAlertTimeMs(alert) {
+  const candidates = [alert?.created_at, alert?.time, alert?.created_at_ms, alert?.payload?.created_at_ms];
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const parsed = typeof candidate === "number" ? candidate : new Date(candidate).getTime();
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return 0;
+}
+
+function getAlertStatusTone(alert) {
+  if (alert?.notify_error) {
+    return "danger";
+  }
+  if (alert?.notified) {
+    return "success";
+  }
+  return "primary";
+}
+
+function getAlertStatusLabel(alert) {
+  if (alert?.notify_error) {
+    return "Failed";
+  }
+  if (alert?.notified) {
+    return "Active";
+  }
+  return "New";
+}
+
+function getAlertSeverity(alert) {
+  const raw = alert?.severity ?? alert?.payload?.severity ?? alert?.meta?.severity;
+  if (raw) {
+    return raw;
+  }
+  const score = Number(alert?.score ?? alert?.payload?.score ?? alert?.context?.score);
+  if (Number.isFinite(score)) {
+    if (score >= 85) return "critical";
+    if (score >= 70) return "high";
+    if (score >= 50) return "medium";
+  }
+  return "low";
+}
+
+function getAlertTakeProfit(alert) {
+  return (
+    alert?.tp ??
+    alert?.take_profit ??
+    alert?.take_profit_price ??
+    alert?.payload?.tp ??
+    alert?.payload?.take_profit ??
+    alert?.payload?.target?.price ??
+    null
+  );
+}
+
+function formatAlertConfidence(alert) {
+  if (!alert) {
+    return "-";
+  }
+  const score = alert.score ?? alert.payload?.score ?? alert.context?.score;
+  if (score !== null && score !== undefined && !Number.isNaN(Number(score))) {
+    return `${Number(score).toFixed(0)}%`;
+  }
+  return getAlertSeverity(alert);
+}
+
+function getPollerStatusLabel(pollerStatus) {
+  if (!pollerStatus) {
+    return "Checking";
+  }
+  if (!pollerStatus.is_running) {
+    return "Disconnected";
+  }
+  if (pollerStatus.mode === "pause_all") {
+    return "Paused";
+  }
+  if (pollerStatus.mode === "pause_new") {
+    return "Degraded";
+  }
+  return "Online";
+}
+
+function getPollerStatusTone(pollerStatus) {
+  if (!pollerStatus || !pollerStatus.is_running) {
+    return "danger";
+  }
+  if (pollerStatus.mode === "pause_all" || pollerStatus.mode === "pause_new" || pollerStatus.last_error) {
+    return "warning";
+  }
+  return "success";
+}
+
+function getLevelsByRole(levels, role) {
+  const detailed = Array.isArray(levels?.final_levels_detailed) ? levels.final_levels_detailed : [];
+  return detailed.filter((level) => level?.role === role).slice(0, 4);
+}
+
 function formatTelegramText(alert) {
   if (!alert) {
     return "";
@@ -4216,29 +5792,29 @@ function buildWorkspaceMarkers(levelEvents, setupItems, openings) {
 
   const mapped = markers.map((marker) => {
     const isBull = marker.direction === "up" || marker.direction === "long";
-    let color = "#667085";
+    let color = "#6F7D91";
     let shape = "circle";
     let position = isBull ? "belowBar" : "aboveBar";
     let text = marker.type?.toUpperCase?.() ?? "M";
     switch (marker.type) {
       case "break":
-        color = isBull ? "#168A5B" : "#C0352B";
+        color = isBull ? "#10B981" : "#EF4444";
         shape = isBull ? "arrowUp" : "arrowDown";
         position = isBull ? "aboveBar" : "belowBar";
         text = "B";
         break;
       case "retest":
-        color = "#667085";
+        color = "#6F7D91";
         shape = "circle";
         text = "R";
         break;
       case "fakeout":
-        color = "#B7791F";
+        color = "#F59E0B";
         shape = "circle";
         text = "F";
         break;
       case "setup":
-        color = isBull ? "#168A5B" : "#C0352B";
+        color = isBull ? "#10B981" : "#EF4444";
         shape = isBull ? "arrowUp" : "arrowDown";
         text = "S";
         break;
@@ -4715,29 +6291,29 @@ function buildReplayMarkers(signals) {
     .map((signal) => {
       const direction = signal.direction;
       const isBull = direction === "up" || direction === "long";
-      let color = "#667085";
+      let color = "#6F7D91";
       let shape = "circle";
       let position = isBull ? "belowBar" : "aboveBar";
       let text = signal.type?.toUpperCase?.() ?? "M";
       switch (signal.type) {
         case "break":
-          color = isBull ? "#168A5B" : "#C0352B";
+          color = isBull ? "#10B981" : "#EF4444";
           shape = isBull ? "arrowUp" : "arrowDown";
           position = isBull ? "aboveBar" : "belowBar";
           text = "B";
           break;
         case "fakeout":
-          color = "#B7791F";
+          color = "#F59E0B";
           shape = "circle";
           text = "F";
           break;
         case "retest":
-          color = isBull ? "#2563EB" : "#1F4E79";
+          color = isBull ? "#22D3EE" : "#3B82F6";
           shape = "circle";
           text = "R";
           break;
         case "setup":
-          color = isBull ? "#168A5B" : "#C0352B";
+          color = isBull ? "#10B981" : "#EF4444";
           shape = isBull ? "arrowUp" : "arrowDown";
           text = "S";
           break;
@@ -4753,6 +6329,145 @@ function buildReplayMarkers(signals) {
       };
     });
   return mapped.sort((a, b) => a.time - b.time);
+}
+
+function LevelCard({ level, onRemovePinned, onRemoveDisabled }) {
+  const isSupport = level.role === "support";
+  const roleLabel = isSupport ? "Support" : level.role === "resistance" ? "Resistance" : "Level";
+  const statusTone = level.status === "pinned" ? "primary" : level.status === "disabled" ? "danger" : "success";
+  return (
+    <div className={`structure-level-card level-${level.role || "mixed"}`}>
+      <div className="level-main">
+        <LevelBadge role={level.role} />
+        <strong>{formatNumber(level.price)}</strong>
+      </div>
+      <div className="level-details">
+        <span>{level.source ?? "scanner"}</span>
+        <span>{level.pattern ?? "-"}</span>
+        <span>Open {formatNumber(level.open)}</span>
+      </div>
+      <div className="level-status">
+        <StatusBadge tone={statusTone}>{level.status ?? "active"}</StatusBadge>
+        {level.status === "pinned" && onRemovePinned ? (
+          <button className="btn btn-small btn-ghost" type="button" onClick={() => onRemovePinned(level.price)}>
+            Remove
+          </button>
+        ) : null}
+        {level.status === "disabled" && onRemoveDisabled ? (
+          <button className="btn btn-small btn-ghost" type="button" onClick={() => onRemoveDisabled(level.price)}>
+            Remove
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function LevelBadge({ role }) {
+  const label = role === "support" ? "Support" : role === "resistance" ? "Resistance" : "Level";
+  const tone = role === "support" ? "success" : role === "resistance" ? "danger" : "muted";
+  return <StatusBadge tone={tone}>{label}</StatusBadge>;
+}
+
+function OverridePanel({ title, value, onChange, onAdd, items, onRemove, placeholder, tone }) {
+  return (
+    <div className="override-panel">
+      <h3>{title}</h3>
+      <div className="override-input-row">
+        <input type="number" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+        <button className="btn" type="button" onClick={onAdd}>
+          Add
+        </button>
+      </div>
+      {Array.isArray(items) && items.length > 0 ? (
+        <div className="override-list">
+          {items.map((item) => (
+            <div className="override-item" key={item}>
+              <StatusBadge tone={tone === "pinned" ? "primary" : "danger"}>{tone === "pinned" ? "Pinned" : "Disabled"}</StatusBadge>
+              <strong>{formatNumber(item)}</strong>
+              <button className="btn btn-small btn-ghost" type="button" onClick={() => onRemove(item)}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="muted">None</p>
+      )}
+    </div>
+  );
+}
+
+function normalizeDetectedLevel(item, levels) {
+  const role = item?.role === "support" || item?.role === "resistance" ? item.role : "mixed";
+  return {
+    id: `detected-${role}-${item?.center}`,
+    role,
+    price: item?.center,
+    source: levels?.htf_timeframe ? `HTF ${levels.htf_timeframe}` : "scanner",
+    pattern: item?.pattern ? String(item.pattern).replace("_", " -> ") : "detected",
+    open: item?.trigger_open,
+    status: "active"
+  };
+}
+
+function buildEffectiveLevelItems(levels, pinnedLevels = [], disabledLevels = []) {
+  if (!levels) {
+    return [];
+  }
+  const disabledSet = new Set(disabledLevels.map((item) => Number(item)));
+  const detailed = Array.isArray(levels.final_levels_detailed) ? levels.final_levels_detailed : [];
+  const detailedByPrice = new Map(
+    detailed.map((item) => [Number(item.center), normalizeDetectedLevel(item, levels)])
+  );
+  const finalPrices = Array.isArray(levels.final_levels) ? levels.final_levels : [];
+  const rows = finalPrices.map((price) => {
+    const numeric = Number(price);
+    const existing = detailedByPrice.get(numeric);
+    return {
+      id: `effective-${numeric}`,
+      ...(existing ?? {
+        role: "mixed",
+        price: numeric,
+        source: levels?.htf_timeframe ? `HTF ${levels.htf_timeframe}` : "scanner",
+        pattern: "effective",
+        open: null
+      }),
+      price: numeric,
+      status: disabledSet.has(numeric) ? "disabled" : "active"
+    };
+  });
+  pinnedLevels.forEach((price) => {
+    const numeric = Number(price);
+    if (!rows.some((row) => Number(row.price) === numeric)) {
+      rows.push({
+        id: `pinned-${numeric}`,
+        role: inferLevelRole(numeric, levels?.last_close_used),
+        price: numeric,
+        source: "manual override",
+        pattern: "pinned",
+        open: null,
+        status: "pinned"
+      });
+    }
+  });
+  disabledLevels.forEach((price) => {
+    const numeric = Number(price);
+    const existing = rows.find((row) => Number(row.price) === numeric);
+    if (existing) {
+      existing.status = "disabled";
+    }
+  });
+  return rows.sort((a, b) => Number(a.price) - Number(b.price));
+}
+
+function inferLevelRole(price, reference) {
+  const numeric = Number(price);
+  const ref = Number(reference);
+  if (!Number.isFinite(numeric) || !Number.isFinite(ref)) {
+    return "mixed";
+  }
+  return numeric <= ref ? "support" : "resistance";
 }
 
 function LevelList({ items, emptyLabel }) {

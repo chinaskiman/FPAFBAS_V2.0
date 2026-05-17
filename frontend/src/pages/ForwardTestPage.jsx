@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { EmptyState, ErrorState, LoadingSkeleton, MetricCard, PageHeader, StatusBadge } from "../components/ui.jsx";
 
 const fetchJson = async (url, options = {}) => {
   const res = await fetch(url, options);
@@ -16,7 +17,7 @@ const fmt = (value, digits = 2) => {
 };
 
 const fmtPct = (value, digits = 2) => (value === null || value === undefined ? "-" : `${fmt(value, digits)}%`);
-const fmtMoney = (value) => (value === null || value === undefined ? "-" : `$${fmt(value, 2)}`);
+const fmtMoney = (value) => (value === null || value === undefined ? "-" : `${fmt(value, 2)} USDT`);
 const fmtTs = (value) => (value ? new Date(value).toLocaleString() : "-");
 const fmtDuration = (ms) => {
   if (!ms || ms < 0) return "-";
@@ -25,6 +26,29 @@ const fmtDuration = (ms) => {
   const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
   const minutes = totalMinutes % 60;
   return `${days}d ${hours}h ${minutes}m`;
+};
+const fmtLeverage = (value) => (value === null || value === undefined ? "-" : `${fmt(value, 0)}x`);
+const fmtRisk = (value) => (value === null || value === undefined ? "-" : fmtPct(Number(value) * 100));
+const fmtMeta = (value) => {
+  if (value === null || value === undefined || value === "") return "-";
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "-";
+  if (typeof value === "object") return JSON.stringify(value);
+  return value;
+};
+const valueTone = (value) => {
+  const number = Number(value);
+  if (Number.isNaN(number) || number === 0) return "default";
+  return number > 0 ? "success" : "danger";
+};
+const statusLabel = (status, error) => {
+  if (error) return "Error";
+  if (!status) return "Loading";
+  return status.enabled ? "Running" : "Paused";
+};
+const statusTone = (status, error) => {
+  if (error) return "danger";
+  if (!status) return "muted";
+  return status.enabled ? "success" : "warning";
 };
 
 export default function ForwardTestPage() {
@@ -91,43 +115,52 @@ export default function ForwardTestPage() {
   const breakdowns = summary?.breakdowns ?? {};
   const charts = summary?.charts ?? {};
 
-  const cardRows = useMemo(
+  const performanceCards = useMemo(
     () => [
-      ["Net Profit", fmtMoney(metrics.net_profit)],
-      ["Gross Profit", fmtMoney(metrics.gross_profit)],
-      ["Gross Loss", fmtMoney(metrics.gross_loss)],
-      ["Profit Factor", fmt(metrics.profit_factor, 3)],
-      ["Win Rate", fmtPct(metrics.win_rate_pct)],
-      ["Loss Rate", fmtPct(metrics.loss_rate_pct)],
+      ["Net Profit", fmtMoney(metrics.net_profit), fmtPct(metrics.return_on_equity_pct), valueTone(metrics.net_profit)],
+      ["Gross Profit", fmtMoney(metrics.gross_profit), null, "success"],
+      ["Gross Loss", fmtMoney(metrics.gross_loss), null, "danger"],
+      ["Profit Factor", fmt(metrics.profit_factor, 3), null, Number(metrics.profit_factor) >= 1 ? "success" : "warning"],
+      ["Win Rate", fmtPct(metrics.win_rate_pct), `${fmtPct(metrics.loss_rate_pct)} loss rate`, "default"],
+      ["Total Trades", fmt(metrics.total_trades, 0), `${fmt(metrics.consecutive_wins, 0)}W / ${fmt(metrics.consecutive_losses, 0)}L streak`, "default"]
+    ],
+    [metrics]
+  );
+
+  const riskMetrics = useMemo(
+    () => [
       ["Average R:R", fmt(metrics.risk_reward_ratio, 3)],
       ["Expectancy / Trade", fmtMoney(metrics.expectancy_per_trade)],
       ["Average Win", fmtMoney(metrics.average_win)],
       ["Average Loss", fmtMoney(metrics.average_loss)],
       ["Max Drawdown", fmtPct(metrics.max_drawdown_pct)],
       ["Absolute Drawdown", fmtMoney(metrics.absolute_drawdown)],
-      ["Sharpe Ratio", fmt(metrics.sharpe_ratio, 3)],
-      ["Sortino Ratio", fmt(metrics.sortino_ratio, 3)],
-      ["Calmar Ratio", fmt(metrics.calmar_ratio, 3)],
-      ["Equity Slope / Day", fmtMoney(metrics.equity_curve_slope_per_day)],
       ["Recovery Factor", fmt(metrics.recovery_factor, 3)],
-      ["Total Trades", fmt(metrics.total_trades, 0)],
+      ["Volatility of Returns", fmt(metrics.volatility_of_returns, 4)]
+    ],
+    [metrics]
+  );
+
+  const costMetrics = useMemo(
+    () => [
       ["Funding Fees Paid", fmtMoney(metrics.funding_fees_paid)],
       ["Funding Fees Received", fmtMoney(metrics.funding_fees_received)],
       ["Trading Fees Paid", fmtMoney(metrics.trading_fees_paid)],
       ["Slippage", fmtMoney(metrics.slippage_paid)],
       ["Average Holding Time", fmtDuration(metrics.average_holding_time_ms)],
-      ["Exposure Time", fmtPct(metrics.exposure_time_pct)],
+      ["Exposure Time", fmtPct(metrics.exposure_time_pct)]
+    ],
+    [metrics]
+  );
+
+  const marginMetrics = useMemo(
+    () => [
       ["Margin Usage Avg", fmtPct(metrics.margin_usage_pct_avg)],
       ["Margin Usage Max", fmtPct(metrics.margin_usage_pct_max)],
       ["Liq Distance Avg", fmtPct(metrics.liquidation_distance_pct_avg)],
       ["Liq Distance Min", fmtPct(metrics.liquidation_distance_pct_min)],
       ["ROE", fmtPct(metrics.return_on_equity_pct)],
-      ["Volatility of Returns", fmt(metrics.volatility_of_returns, 4)],
-      ["Consecutive Wins", fmt(metrics.consecutive_wins, 0)],
-      ["Consecutive Losses", fmt(metrics.consecutive_losses, 0)],
-      ["Position Size Consistency", fmt(metrics.position_size_consistency, 4)],
-      ["MAE Avg (R)", fmt(metrics.mae_avg_r, 3)],
-      ["MFE Avg (R)", fmt(metrics.mfe_avg_r, 3)]
+      ["Position Size Consistency", fmt(metrics.position_size_consistency, 4)]
     ],
     [metrics]
   );
@@ -140,6 +173,8 @@ export default function ForwardTestPage() {
   const equityCurve = charts.equity_curve?.length ? charts.equity_curve : equity;
   const drawdownCurve = (equityCurve ?? []).map((item) => ({ time: item.time, value: item.drawdown_pct ?? 0 }));
   const maeMfe = charts.mae_mfe ?? [];
+  const hasTrades = (tradesData.items ?? []).length > 0;
+  const hasForwardData = Boolean(summary) && ((equityCurve ?? []).length > 0 || hasTrades || Number(metrics.total_trades) > 0);
 
   const exportTrades = async () => {
     const token = window.prompt("Enter ADMIN_TOKEN for CSV export:");
@@ -183,243 +218,363 @@ export default function ForwardTestPage() {
   };
 
   return (
-    <div className="forward-test-page">
-      <section className="panel">
-        <div className="panel-header">
-          <h1>Forward Test</h1>
-          <div className="row gap">
-            <button className="btn btn-small" type="button" onClick={refreshAll}>
+    <div className="forward-test-page paper-trades-page">
+      <PageHeader
+        eyebrow="Simulated execution"
+        title="Paper Trades"
+        actions={
+          <>
+            <button className="btn btn-small btn-secondary" type="button" onClick={refreshAll}>
               Refresh
             </button>
-            <button className="btn btn-small" type="button" onClick={() => setForwardMode(true)}>
+            <button className="btn btn-small btn-success" type="button" onClick={() => setForwardMode(true)}>
               Run
             </button>
-            <button className="btn btn-small" type="button" onClick={() => setForwardMode(false)}>
+            <button className="btn btn-small btn-warning" type="button" onClick={() => setForwardMode(false)}>
               Pause
             </button>
-            <button className="btn btn-small" type="button" onClick={exportTrades}>
+            <button className="btn btn-small btn-secondary" type="button" onClick={exportTrades}>
               Export CSV
             </button>
-          </div>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-        {loading && !summary ? <p className="muted">Loading forward test...</p> : null}
-        <div className="forward-status-grid">
-          <div className="stat-item">
-            <span>Status</span>
-            <strong>{status?.enabled ? "Running" : "Paused"}</strong>
-          </div>
-          <div className="stat-item">
-            <span>Start Time</span>
-            <strong>{fmtTs(status?.start_time)}</strong>
-          </div>
-          <div className="stat-item">
-            <span>Open Positions</span>
-            <strong>{fmt(status?.open_positions, 0)}</strong>
-          </div>
-          <div className="stat-item">
-            <span>Pending Orders</span>
-            <strong>{fmt(status?.pending_orders, 0)}</strong>
-          </div>
-          <div className="stat-item">
-            <span>Leverage</span>
-            <strong>{fmt(status?.leverage, 0)}x</strong>
-          </div>
-          <div className="stat-item">
-            <span>Risk / Trade</span>
-            <strong>{fmtPct((status?.risk_pct ?? 0) * 100)}</strong>
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      >
+        Forward-test strategy performance using simulated execution.
+      </PageHeader>
 
-      <section className="panel">
-        <h2>Performance Metrics</h2>
-        <div className="forward-metrics-grid">
-          {cardRows.map(([label, value]) => (
-            <div key={label} className="metric-card">
+      {error ? (
+        <ErrorState title="Could not load paper trade data" onRetry={refreshAll} onViewLogs={() => window.location.assign("/ops")}>
+          Check the bot service status or retry the request.
+        </ErrorState>
+      ) : null}
+
+      {loading && !summary ? (
+        <LoadingSkeleton label="Loading paper trade data" rows={3} />
+      ) : (
+        <>
+          <div className="metric-strip paper-status-strip">
+            <MetricCard
+              label="Status"
+              value={<StatusBadge tone={statusTone(status, error)}>{statusLabel(status, error)}</StatusBadge>}
+            />
+            <MetricCard label="Start Time" value={fmtTs(status?.start_time)} />
+            <MetricCard label="Open Positions" value={fmt(status?.open_positions, 0)} />
+            <MetricCard label="Pending Orders" value={fmt(status?.pending_orders, 0)} />
+            <MetricCard label="Leverage" value={fmtLeverage(status?.leverage)} />
+            <MetricCard label="Risk per Trade" value={fmtRisk(status?.risk_pct)} />
+          </div>
+
+          {!hasForwardData ? (
+            <section className="card paper-empty-card">
+              <EmptyState
+                title="No forward test data yet"
+                actions={
+                  <>
+                    <button className="btn btn-small btn-success" type="button" onClick={() => setForwardMode(true)}>
+                      Run forward test
+                    </button>
+                    <button className="btn btn-small btn-secondary" type="button" onClick={refreshAll}>
+                      Refresh
+                    </button>
+                  </>
+                }
+              >
+                Start the paper trading engine to generate simulated trades, PnL, drawdown, and risk metrics.
+              </EmptyState>
+            </section>
+          ) : null}
+
+          <div className="paper-trades-grid">
+            <main className="paper-main-column">
+              <section className="card paper-performance-card">
+                <div className="card-header">
+                  <h2>Performance Overview</h2>
+                </div>
+                <div className="card-body">
+                  <div className="paper-performance-grid">
+                    {performanceCards.map(([label, value, detail, tone]) => (
+                      <MetricCard key={label} label={label} value={value} detail={detail} tone={tone} />
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              <section className="card paper-chart-card">
+                <div className="card-header">
+                  <h2>Equity / PnL</h2>
+                </div>
+                <div className="card-body">
+                  {(equityCurve ?? []).length > 1 ? (
+                    <div className="paper-chart-grid">
+                      <ChartPanel title="Equity Curve">
+                        <SimpleLineChart
+                          points={(equityCurve ?? []).map((item) => ({ x: item.time, y: item.equity }))}
+                          yLabel="Equity"
+                        />
+                      </ChartPanel>
+                      <ChartPanel title="Drawdown Curve">
+                        <SimpleLineChart
+                          points={(drawdownCurve ?? []).map((item) => ({ x: item.time, y: item.value }))}
+                          yLabel="Drawdown %"
+                        />
+                      </ChartPanel>
+                      <ChartPanel title="Daily PnL">
+                        <SimpleBarChart
+                          items={(dailyPnl ?? []).map((item) => ({ label: item.day, value: item.net_profit }))}
+                        />
+                      </ChartPanel>
+                      <ChartPanel title="MAE vs MFE">
+                        <SimpleScatterChart
+                          items={(maeMfe ?? []).map((item) => ({ x: item.mae_r, y: item.mfe_r, value: item.net_pnl }))}
+                          xLabel="MAE (R)"
+                          yLabel="MFE (R)"
+                        />
+                      </ChartPanel>
+                    </div>
+                  ) : (
+                    <EmptyState title="No equity curve yet">
+                      Run the forward test to generate simulated performance data.
+                    </EmptyState>
+                  )}
+                </div>
+              </section>
+
+              <section className="card paper-breakdown-card">
+                <div className="card-header">
+                  <h2>Strategy Breakdowns</h2>
+                </div>
+                <div className="card-body">
+                  <div className="paper-chart-grid paper-chart-grid-compact">
+                    <ChartPanel title="Time of Day">
+                      <SimpleBarChart
+                        items={(hourPerf ?? []).map((item) => ({ label: String(item.hour), value: item.net_profit }))}
+                      />
+                    </ChartPanel>
+                    <ChartPanel title="Day of Week">
+                      <SimpleBarChart
+                        items={(dayPerf ?? []).map((item) => ({ label: item.day?.slice(0, 3), value: item.net_profit }))}
+                      />
+                    </ChartPanel>
+                    <ChartPanel title="Market Regime">
+                      <SimpleBarChart
+                        items={(regimePerf ?? []).map((item) => ({ label: item.regime, value: item.net_profit }))}
+                      />
+                    </ChartPanel>
+                    <ChartPanel title="Long vs Short">
+                      <SimpleBarChart
+                        items={(longShort ?? []).map((item) => ({ label: item.side, value: item.net_profit }))}
+                      />
+                    </ChartPanel>
+                  </div>
+                </div>
+              </section>
+
+              <section className="card paper-trades-card">
+                <div className="card-header paper-trades-header">
+                  <div>
+                    <h2>Trades</h2>
+                    <span className="muted">{fmt(tradesData.total ?? 0, 0)} closed trades</span>
+                  </div>
+                  <div className="paper-trades-filters">
+                    <input
+                      placeholder="Symbol"
+                      value={tradesFilters.symbol}
+                      onChange={(e) => {
+                        setTradesOffset(0);
+                        setTradesFilters((prev) => ({ ...prev, symbol: e.target.value.toUpperCase() }));
+                      }}
+                    />
+                    <select
+                      value={tradesFilters.tf}
+                      onChange={(e) => {
+                        setTradesOffset(0);
+                        setTradesFilters((prev) => ({ ...prev, tf: e.target.value }));
+                      }}
+                    >
+                      <option value="">All TF</option>
+                      <option value="15m">15m</option>
+                      <option value="1h">1h</option>
+                      <option value="4h">4h</option>
+                      <option value="1d">1d</option>
+                    </select>
+                    <select
+                      value={tradesFilters.direction}
+                      onChange={(e) => {
+                        setTradesOffset(0);
+                        setTradesFilters((prev) => ({ ...prev, direction: e.target.value }));
+                      }}
+                    >
+                      <option value="">All Sides</option>
+                      <option value="long">Long</option>
+                      <option value="short">Short</option>
+                    </select>
+                    <select
+                      value={tradesLimit}
+                      onChange={(e) => {
+                        setTradesOffset(0);
+                        setTradesLimit(Number(e.target.value));
+                      }}
+                    >
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                      <option value={200}>200</option>
+                      <option value={500}>500</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="card-body">
+                  {hasTrades ? (
+                    <>
+                      <div className="table-wrap paper-trades-table">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Time</th>
+                              <th>Symbol</th>
+                              <th>TF</th>
+                              <th>Direction</th>
+                              <th>Entry</th>
+                              <th>Exit</th>
+                              <th>Size</th>
+                              <th>PnL</th>
+                              <th>R:R</th>
+                              <th>Fees</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(tradesData.items ?? []).map((item, index) => {
+                              const hasSplitFees = item.funding_fee !== undefined || item.trading_fee !== undefined;
+                              const fees =
+                                item.fees ??
+                                item.total_fees ??
+                                (hasSplitFees ? Number(item.funding_fee ?? 0) + Number(item.trading_fee ?? 0) : null);
+                              const direction = String(item.direction ?? "").toLowerCase();
+                              return (
+                                <tr key={item.id ?? `${item.symbol}-${item.exit_time}-${index}`}>
+                                  <td>{fmtTs(item.exit_time ?? item.entry_time)}</td>
+                                  <td>{item.symbol ?? "-"}</td>
+                                  <td>{item.tf ?? "-"}</td>
+                                  <td>
+                                    <StatusBadge tone={direction === "short" ? "danger" : "success"}>
+                                      {item.direction ?? "-"}
+                                    </StatusBadge>
+                                  </td>
+                                  <td>{fmt(item.entry_price, 4)}</td>
+                                  <td>{fmt(item.exit_price, 4)}</td>
+                                  <td>{fmt(item.position_size ?? item.size ?? item.qty, 4)}</td>
+                                  <td className={Number(item.net_pnl) >= 0 ? "pos" : "neg"}>{fmtMoney(item.net_pnl)}</td>
+                                  <td>{fmt(item.risk_reward ?? item.rr ?? item.mfe_r, 3)}</td>
+                                  <td>{fmtMoney(fees)}</td>
+                                  <td>
+                                    <StatusBadge tone={item.status === "failed" ? "danger" : "muted"}>
+                                      {item.status ?? item.exit_reason ?? "Closed"}
+                                    </StatusBadge>
+                                  </td>
+                                  <td>
+                                    <div className="row-actions">
+                                      <button
+                                        className="btn btn-small btn-ghost"
+                                        type="button"
+                                        disabled={!item.id || !navigator.clipboard}
+                                        onClick={() => navigator.clipboard.writeText(String(item.id))}
+                                      >
+                                        Copy ID
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="pagination">
+                        <span>
+                          {fmt(tradesOffset + 1, 0)}-
+                          {fmt(Math.min(tradesOffset + tradesLimit, tradesData.total ?? 0), 0)} of{" "}
+                          {fmt(tradesData.total ?? 0, 0)}
+                        </span>
+                        <div className="pagination-actions">
+                          <button
+                            className="btn btn-small btn-secondary"
+                            type="button"
+                            disabled={tradesOffset <= 0}
+                            onClick={() => setTradesOffset((prev) => Math.max(0, prev - tradesLimit))}
+                          >
+                            Prev
+                          </button>
+                          <button
+                            className="btn btn-small btn-secondary"
+                            type="button"
+                            disabled={tradesOffset + tradesLimit >= (tradesData.total ?? 0)}
+                            onClick={() => setTradesOffset((prev) => prev + tradesLimit)}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <EmptyState title="No trades found">
+                      Run the forward test or adjust filters to review simulated execution history.
+                    </EmptyState>
+                  )}
+                </div>
+              </section>
+            </main>
+
+            <aside className="paper-side-column">
+              <MetricGroup title="Risk Metrics" items={riskMetrics} />
+              <MetricGroup title="Cost & Execution" items={costMetrics} />
+              <MetricGroup title="Margin & Liquidation" items={marginMetrics} />
+              <MetricGroup
+                title="Test Controls"
+                items={[
+                  ["Symbols", fmtMeta(status?.symbols ?? metrics.symbols)],
+                  ["Timeframes", fmtMeta(status?.timeframes ?? metrics.timeframes)],
+                  ["Strategy", fmtMeta(status?.strategy ?? metrics.strategy)],
+                  ["Risk Model", fmtMeta(status?.risk_model ?? metrics.risk_model)],
+                  ["Leverage", fmtLeverage(status?.leverage)],
+                  ["Started At", fmtTs(status?.start_time)],
+                  ["Last Updated", fmtTs(status?.last_updated ?? summary?.generated_at)]
+                ]}
+              />
+            </aside>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ChartPanel({ title, children }) {
+  return (
+    <div className="paper-chart-panel">
+      <h3>{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function MetricGroup({ title, items }) {
+  return (
+    <section className="card paper-metric-group">
+      <div className="card-header">
+        <h2>{title}</h2>
+      </div>
+      <div className="card-body">
+        <div className="paper-metric-list">
+          {items.map(([label, value]) => (
+            <div className="paper-metric-row" key={label}>
               <span>{label}</span>
-              <strong>{value}</strong>
+              <strong>{value === null || value === undefined || value === "" ? "-" : value}</strong>
             </div>
           ))}
         </div>
-      </section>
-
-      <section className="panel">
-        <h2>Equity Curve</h2>
-        <SimpleLineChart
-          points={(equityCurve ?? []).map((item) => ({ x: item.time, y: item.equity }))}
-          yLabel="Equity"
-        />
-      </section>
-
-      <section className="panel">
-        <h2>Drawdown Curve (%)</h2>
-        <SimpleLineChart
-          points={(drawdownCurve ?? []).map((item) => ({ x: item.time, y: item.value }))}
-          yLabel="Drawdown %"
-        />
-      </section>
-
-      <section className="panel">
-        <h2>Daily PnL</h2>
-        <SimpleBarChart
-          items={(dailyPnl ?? []).map((item) => ({ label: item.day, value: item.net_profit }))}
-        />
-      </section>
-
-      <section className="panel two-col">
-        <div>
-          <h2>Time-of-Day Performance</h2>
-          <SimpleBarChart
-            items={(hourPerf ?? []).map((item) => ({ label: String(item.hour), value: item.net_profit }))}
-          />
-        </div>
-        <div>
-          <h2>Day-of-Week Performance</h2>
-          <SimpleBarChart
-            items={(dayPerf ?? []).map((item) => ({ label: item.day.slice(0, 3), value: item.net_profit }))}
-          />
-        </div>
-      </section>
-
-      <section className="panel two-col">
-        <div>
-          <h2>Market Regime Performance</h2>
-          <SimpleBarChart
-            items={(regimePerf ?? []).map((item) => ({ label: item.regime, value: item.net_profit }))}
-          />
-        </div>
-        <div>
-          <h2>Long vs Short Performance</h2>
-          <SimpleBarChart
-            items={(longShort ?? []).map((item) => ({ label: item.side, value: item.net_profit }))}
-          />
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>MAE vs MFE (R)</h2>
-        <SimpleScatterChart
-          items={(maeMfe ?? []).map((item) => ({ x: item.mae_r, y: item.mfe_r, value: item.net_pnl }))}
-          xLabel="MAE (R)"
-          yLabel="MFE (R)"
-        />
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <h2>Closed Trades</h2>
-          <div className="row gap">
-            <input
-              placeholder="Symbol"
-              value={tradesFilters.symbol}
-              onChange={(e) => {
-                setTradesOffset(0);
-                setTradesFilters((prev) => ({ ...prev, symbol: e.target.value.toUpperCase() }));
-              }}
-            />
-            <select
-              value={tradesFilters.tf}
-              onChange={(e) => {
-                setTradesOffset(0);
-                setTradesFilters((prev) => ({ ...prev, tf: e.target.value }));
-              }}
-            >
-              <option value="">All TF</option>
-              <option value="15m">15m</option>
-              <option value="1h">1h</option>
-              <option value="4h">4h</option>
-              <option value="1d">1d</option>
-            </select>
-            <select
-              value={tradesFilters.direction}
-              onChange={(e) => {
-                setTradesOffset(0);
-                setTradesFilters((prev) => ({ ...prev, direction: e.target.value }));
-              }}
-            >
-              <option value="">All Sides</option>
-              <option value="long">Long</option>
-              <option value="short">Short</option>
-            </select>
-            <select
-              value={tradesLimit}
-              onChange={(e) => {
-                setTradesOffset(0);
-                setTradesLimit(Number(e.target.value));
-              }}
-            >
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-              <option value={200}>200</option>
-              <option value={500}>500</option>
-            </select>
-          </div>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Exit Time</th>
-                <th>Symbol</th>
-                <th>TF</th>
-                <th>Type</th>
-                <th>Side</th>
-                <th>Entry</th>
-                <th>Exit</th>
-                <th>PnL</th>
-                <th>ROE</th>
-                <th>MAE (R)</th>
-                <th>MFE (R)</th>
-                <th>Hold</th>
-                <th>Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(tradesData.items ?? []).map((item) => (
-                <tr key={item.id}>
-                  <td>{fmtTs(item.exit_time)}</td>
-                  <td>{item.symbol}</td>
-                  <td>{item.tf}</td>
-                  <td>{item.signal_type}</td>
-                  <td>{item.direction}</td>
-                  <td>{fmt(item.entry_price, 4)}</td>
-                  <td>{fmt(item.exit_price, 4)}</td>
-                  <td className={Number(item.net_pnl) >= 0 ? "pos" : "neg"}>{fmtMoney(item.net_pnl)}</td>
-                  <td>{fmtPct(item.roe_pct)}</td>
-                  <td>{fmt(item.mae_r, 3)}</td>
-                  <td>{fmt(item.mfe_r, 3)}</td>
-                  <td>{fmt(item.holding_candles, 0)} candles</td>
-                  <td>{item.exit_reason}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="row gap">
-          <button
-            className="btn btn-small"
-            type="button"
-            disabled={tradesOffset <= 0}
-            onClick={() => setTradesOffset((prev) => Math.max(0, prev - tradesLimit))}
-          >
-            Prev
-          </button>
-          <button
-            className="btn btn-small"
-            type="button"
-            disabled={tradesOffset + tradesLimit >= (tradesData.total ?? 0)}
-            onClick={() => setTradesOffset((prev) => prev + tradesLimit)}
-          >
-            Next
-          </button>
-          <span className="muted">
-            {fmt(tradesOffset + 1, 0)}-{fmt(Math.min(tradesOffset + tradesLimit, tradesData.total ?? 0), 0)} of{" "}
-            {fmt(tradesData.total ?? 0, 0)}
-          </span>
-        </div>
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }
 
