@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart } from "lightweight-charts";
 
-const EMPTY_HEALTH = { status: "loading" };
 const ADMIN_TOKEN_SESSION_KEY = "fpafbas_admin_token";
 const REPLAY_ENTRY_TFS = ["15m", "1h"];
 
@@ -67,7 +66,6 @@ const fetchAdminJson = async (url, options = {}) => {
 };
 
 export default function DashboardPage({ view = "dashboard" }) {
-  const [health, setHealth] = useState(EMPTY_HEALTH);
   const [alertsData, setAlertsData] = useState({ items: [], limit: 100, offset: 0, total: 0 });
   const [alertsError, setAlertsError] = useState("");
   const [alertsTab, setAlertsTab] = useState("history");
@@ -231,7 +229,6 @@ export default function DashboardPage({ view = "dashboard" }) {
           fetchJson("/api/watchlist"),
           fetchJson("/api/symbols")
         ]);
-        setHealth({ status: "ok" });
         setWatchlist(watchlistData);
         const apiSymbols = Array.isArray(symbolsData.symbols) ? symbolsData.symbols.map((item) => item.symbol) : [];
         const fallbackSymbols = watchlistData?.symbols ? watchlistData.symbols.map((item) => item.symbol) : [];
@@ -258,46 +255,46 @@ export default function DashboardPage({ view = "dashboard" }) {
     }
     const mainChart = createChart(chartContainerRef.current, {
       height: 360,
-      layout: { background: { color: "#ffffff" }, textColor: "#1f1c17" },
-      grid: { vertLines: { color: "#efe6d8" }, horzLines: { color: "#efe6d8" } },
-      rightPriceScale: { borderColor: "#e0d8c8" },
-      timeScale: { borderColor: "#e0d8c8" }
+      layout: { background: { color: "#ffffff" }, textColor: "#101828" },
+      grid: { vertLines: { color: "#EAECF0" }, horzLines: { color: "#EAECF0" } },
+      rightPriceScale: { borderColor: "#DDE2E8" },
+      timeScale: { borderColor: "#DDE2E8" }
     });
     const candleSeries = mainChart.addCandlestickSeries({
-      upColor: "#0f6b5c",
-      downColor: "#7a2f2f",
+      upColor: "#168A5B",
+      downColor: "#C0352B",
       borderVisible: false,
-      wickUpColor: "#0f6b5c",
-      wickDownColor: "#7a2f2f"
+      wickUpColor: "#168A5B",
+      wickDownColor: "#C0352B"
     });
-    const sma7Series = mainChart.addLineSeries({ color: "#1f1c17", lineWidth: 2, title: "SMA 7" });
-    const sma21Series = mainChart.addLineSeries({ color: "#0f6b5c", lineWidth: 2, title: "SMA 21" });
-    const sma50Series = mainChart.addLineSeries({ color: "#b7791f", lineWidth: 2, title: "SMA 50" });
+    const sma7Series = mainChart.addLineSeries({ color: "#101828", lineWidth: 2, title: "SMA 7" });
+    const sma21Series = mainChart.addLineSeries({ color: "#1F4E79", lineWidth: 2, title: "SMA 21" });
+    const sma50Series = mainChart.addLineSeries({ color: "#B7791F", lineWidth: 2, title: "SMA 50" });
 
     const volumeChart = createChart(volumeContainerRef.current, {
       height: 140,
-      layout: { background: { color: "#ffffff" }, textColor: "#1f1c17" },
-      grid: { vertLines: { color: "#efe6d8" }, horzLines: { color: "#efe6d8" } },
-      rightPriceScale: { borderColor: "#e0d8c8" },
-      timeScale: { borderColor: "#e0d8c8" }
+      layout: { background: { color: "#ffffff" }, textColor: "#101828" },
+      grid: { vertLines: { color: "#EAECF0" }, horzLines: { color: "#EAECF0" } },
+      rightPriceScale: { borderColor: "#DDE2E8" },
+      timeScale: { borderColor: "#DDE2E8" }
     });
     const volumeSeries = volumeChart.addHistogramSeries({
-      color: "#b8b0a3",
+      color: "#C8D0DA",
       priceFormat: { type: "volume" }
     });
-    const volMa5Series = volumeChart.addLineSeries({ color: "#0f6b5c", lineWidth: 1 });
-    const volMa10Series = volumeChart.addLineSeries({ color: "#7a6a45", lineWidth: 1 });
+    const volMa5Series = volumeChart.addLineSeries({ color: "#168A5B", lineWidth: 1 });
+    const volMa10Series = volumeChart.addLineSeries({ color: "#B7791F", lineWidth: 1 });
 
     const indicatorChart = createChart(indicatorContainerRef.current, {
       height: 150,
-      layout: { background: { color: "#ffffff" }, textColor: "#1f1c17" },
-      grid: { vertLines: { color: "#efe6d8" }, horzLines: { color: "#efe6d8" } },
-      rightPriceScale: { borderColor: "#e0d8c8" },
-      timeScale: { borderColor: "#e0d8c8" }
+      layout: { background: { color: "#ffffff" }, textColor: "#101828" },
+      grid: { vertLines: { color: "#EAECF0" }, horzLines: { color: "#EAECF0" } },
+      rightPriceScale: { borderColor: "#DDE2E8" },
+      timeScale: { borderColor: "#DDE2E8" }
     });
-    const diPlusSeries = indicatorChart.addLineSeries({ color: "#0f6b5c", lineWidth: 2, title: "DI+" });
-    const diMinusSeries = indicatorChart.addLineSeries({ color: "#7a2f2f", lineWidth: 2, title: "DI-" });
-    const adxSeries = indicatorChart.addLineSeries({ color: "#1f1c17", lineWidth: 2, title: "ADX" });
+    const diPlusSeries = indicatorChart.addLineSeries({ color: "#168A5B", lineWidth: 2, title: "DI+" });
+    const diMinusSeries = indicatorChart.addLineSeries({ color: "#C0352B", lineWidth: 2, title: "DI-" });
+    const adxSeries = indicatorChart.addLineSeries({ color: "#101828", lineWidth: 2, title: "ADX" });
 
     chartRefs.current = {
       main: mainChart,
@@ -835,7 +832,7 @@ export default function DashboardPage({ view = "dashboard" }) {
         const label = `${role === "support" ? "Support" : role === "resistance" ? "Resistance" : "Level"} ${Number(level.center).toFixed(2)}`;
         const line = refs.candleSeries.createPriceLine({
           price: level.center,
-          color: role === "support" ? "#0f6b5c" : role === "resistance" ? "#7a2f2f" : "#7a6a45",
+          color: role === "support" ? "#168A5B" : role === "resistance" ? "#C0352B" : "#667085",
           lineWidth: 1,
           axisLabelVisible: true,
           title: label
@@ -1506,32 +1503,12 @@ export default function DashboardPage({ view = "dashboard" }) {
   const showLevels = view === "levels";
   const showSettings = view === "settings";
   const showOps = view === "ops";
-  const pageTitle =
-    {
-      dashboard: "Signal Workspace",
-      replay: "Replay Lab",
-      levels: "Active S/R",
-      settings: "Settings",
-      ops: "Operations"
-    }[view] ?? "Signal Workspace";
-
   return (
     <div className="app">
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">Binance USDT Perp Scanner</p>
-          <h1>{pageTitle}</h1>
-        </div>
-        <div className="status-chip">
-          <span>Service</span>
-          <strong>{health.status ?? "unknown"}</strong>
-        </div>
-      </header>
-
       {error ? <div className="error">{error}</div> : null}
       {showSettings ? (
         <section className="card">
-        <h2>Watchlist Raw (Debug)</h2>
+        <h2>Watchlist</h2>
         {watchlistFormError ? <div className="error">{watchlistFormError}</div> : null}
         {watchlistSaveStatus ? <div className="muted">{watchlistSaveStatus}</div> : null}
         <div className="di-controls">
@@ -2583,7 +2560,7 @@ export default function DashboardPage({ view = "dashboard" }) {
               </div>
             </div>
             {filteredAlerts.length === 0 ? (
-              <p className="muted">No alerts match the current filters.</p>
+              <p className="empty-state">No alerts found. Adjust filters or increase the date range.</p>
             ) : (
               <div className="table-wrap">
                 <table>
@@ -4239,29 +4216,29 @@ function buildWorkspaceMarkers(levelEvents, setupItems, openings) {
 
   const mapped = markers.map((marker) => {
     const isBull = marker.direction === "up" || marker.direction === "long";
-    let color = "#7a6a45";
+    let color = "#667085";
     let shape = "circle";
     let position = isBull ? "belowBar" : "aboveBar";
     let text = marker.type?.toUpperCase?.() ?? "M";
     switch (marker.type) {
       case "break":
-        color = isBull ? "#0f6b5c" : "#7a2f2f";
+        color = isBull ? "#168A5B" : "#C0352B";
         shape = isBull ? "arrowUp" : "arrowDown";
         position = isBull ? "aboveBar" : "belowBar";
         text = "B";
         break;
       case "retest":
-        color = "#7a6a45";
+        color = "#667085";
         shape = "circle";
         text = "R";
         break;
       case "fakeout":
-        color = "#c07a2f";
+        color = "#B7791F";
         shape = "circle";
         text = "F";
         break;
       case "setup":
-        color = isBull ? "#2d8f6f" : "#7a2f2f";
+        color = isBull ? "#168A5B" : "#C0352B";
         shape = isBull ? "arrowUp" : "arrowDown";
         text = "S";
         break;
@@ -4738,29 +4715,29 @@ function buildReplayMarkers(signals) {
     .map((signal) => {
       const direction = signal.direction;
       const isBull = direction === "up" || direction === "long";
-      let color = "#7a6a45";
+      let color = "#667085";
       let shape = "circle";
       let position = isBull ? "belowBar" : "aboveBar";
       let text = signal.type?.toUpperCase?.() ?? "M";
       switch (signal.type) {
         case "break":
-          color = isBull ? "#0f6b5c" : "#7a2f2f";
+          color = isBull ? "#168A5B" : "#C0352B";
           shape = isBull ? "arrowUp" : "arrowDown";
           position = isBull ? "aboveBar" : "belowBar";
           text = "B";
           break;
         case "fakeout":
-          color = "#c07a2f";
+          color = "#B7791F";
           shape = "circle";
           text = "F";
           break;
         case "retest":
-          color = isBull ? "#2367a3" : "#8a3f8a";
+          color = isBull ? "#2563EB" : "#1F4E79";
           shape = "circle";
           text = "R";
           break;
         case "setup":
-          color = isBull ? "#2d8f6f" : "#7a2f2f";
+          color = isBull ? "#168A5B" : "#C0352B";
           shape = isBull ? "arrowUp" : "arrowDown";
           text = "S";
           break;

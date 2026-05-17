@@ -15,6 +15,11 @@ const formatTimestamp = (value) => {
   return new Date(value).toLocaleString();
 };
 
+const getSignalStatus = (item) => item.status ?? item.payload?.status ?? item.meta?.status ?? "recorded";
+const getSignalSeverity = (item) => item.severity ?? item.payload?.severity ?? item.meta?.severity ?? "normal";
+const getTakeProfit = (item) =>
+  item.take_profit_price ?? item.tp_price ?? item.payload?.take_profit?.price ?? item.payload?.target?.price;
+
 const getLocalMs = (date, endOfDay = false) => {
   if (!date) return null;
   const iso = endOfDay ? `${date}T23:59:59` : `${date}T00:00:00`;
@@ -206,13 +211,17 @@ export default function JournalPage({ symbols = [] }) {
         {exportStatus ? <span className="muted">{exportStatus}</span> : null}
       </div>
 
-      {loading ? <p className="muted">Loading...</p> : null}
-      {!loading && filteredItems.length === 0 ? <p className="muted">No signals found.</p> : null}
+      {loading ? <div className="loading-skeleton" aria-label="Loading journal rows" /> : null}
+      {!loading && filteredItems.length === 0 ? (
+        <p className="empty-state">No alerts found. Adjust filters or increase the date range.</p>
+      ) : null}
       {filteredItems.length > 0 ? (
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
+                <th>Status</th>
+                <th>Severity</th>
                 <th>Time</th>
                 <th>Symbol</th>
                 <th>TF</th>
@@ -220,21 +229,46 @@ export default function JournalPage({ symbols = [] }) {
                 <th>Strategy</th>
                 <th>Entry</th>
                 <th>SL</th>
+                <th>TP</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredItems.map((item) => (
                 <tr key={item.signal_id} className="clickable" onClick={() => handleSelectDetail(item.signal_id)}>
+                  <td>
+                    <span className="status-badge status-muted">{getSignalStatus(item)}</span>
+                  </td>
+                  <td>
+                    <span className="status-badge status-warning">{getSignalSeverity(item)}</span>
+                  </td>
                   <td>{formatTimestamp(item.created_at_ms ?? item.payload?.created_at_ms)}</td>
                   <td>{item.symbol}</td>
                   <td>{item.timeframe}</td>
-                  <td>{item.direction}</td>
+                  <td>
+                    <span className={`status-badge ${item.direction === "long" ? "status-success" : item.direction === "short" ? "status-danger" : "status-muted"}`}>
+                      {item.direction ?? "-"}
+                    </span>
+                  </td>
                   <td>
                     {(item.payload?.strategy?.id ?? item.meta?.strategy_id ?? "-")}@
                     {(item.payload?.strategy?.version ?? item.meta?.strategy_version ?? "-")}
                   </td>
                   <td>{formatNumber(item.entry_price ?? item.payload?.entry?.price)}</td>
                   <td>{formatNumber(item.stop_price ?? item.payload?.stop?.price)}</td>
+                  <td>{formatNumber(getTakeProfit(item))}</td>
+                  <td>
+                    <button
+                      className="btn btn-small btn-secondary"
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleSelectDetail(item.signal_id);
+                      }}
+                    >
+                      Open
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
