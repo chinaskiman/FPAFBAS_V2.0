@@ -6,6 +6,8 @@ from typing import Optional, Tuple
 
 import requests
 
+from .telegram_settings import load_telegram_settings
+
 logger = logging.getLogger(__name__)
 
 _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
@@ -134,13 +136,14 @@ class TelegramNotifier:
         disable_web_page_preview: Optional[bool] = None,
         message_thread_id: Optional[int] = None,
     ) -> None:
-        self.token = token or os.getenv("TELEGRAM_BOT_TOKEN")
-        self.chat_id = chat_id or os.getenv("TELEGRAM_CHAT_ID")
-        enabled_flag = os.getenv("TELEGRAM_ENABLED")
-        if enabled_flag is None:
-            self.enabled = bool(self.token and self.chat_id)
+        settings = load_telegram_settings()
+        self.token = token or settings.bot_token
+        self.chat_id = chat_id or settings.chat_id
+        explicit_credentials = token is not None or chat_id is not None
+        if explicit_credentials and os.getenv("TELEGRAM_ENABLED") is None:
+            self.enabled = settings.enabled or bool(self.token and self.chat_id)
         else:
-            self.enabled = enabled_flag.strip().lower() in {"1", "true", "yes", "on"}
+            self.enabled = settings.enabled
         self.timeout_seconds = (
             timeout_seconds if timeout_seconds is not None else _env_float("TELEGRAM_TIMEOUT_SECONDS", 10.0)
         )

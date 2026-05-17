@@ -58,6 +58,13 @@ from .notifier import TelegramNotifier
 from .quality_controls import QualitySettings
 from .replay import replay_performance_report, replay_run, replay_summary
 from .forward_test import ForwardTestService
+from .telegram_settings import (
+    TelegramSettings,
+    TelegramSettingsUpdate,
+    load_telegram_settings,
+    save_telegram_settings,
+    telegram_settings_public,
+)
 
 
 load_dotenv()
@@ -89,6 +96,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _refresh_telegram_notifier() -> TelegramNotifier:
+    notifier = TelegramNotifier()
+    app.state.notifier = notifier
+    poller = getattr(app.state, "poller", None)
+    if poller is not None:
+        poller.notifier = notifier
+    return notifier
 
 
 @app.middleware("http")
@@ -644,6 +660,35 @@ async def api_telegram_test(request: Request) -> dict:
     notifier = getattr(app.state, "notifier", TelegramNotifier())
     ok, error = notifier.send_telegram(text)
     return {"ok": ok, "error": error, "sent_text": text}
+
+
+@app.get("/api/telegram/settings", dependencies=[Depends(require_admin)])
+def api_telegram_settings() -> dict:
+    return telegram_settings_public(load_telegram_settings())
+
+
+@app.put("/api/telegram/settings", dependencies=[Depends(require_admin)])
+async def api_telegram_settings_put(request: Request) -> dict:
+    try:
+        payload = await request.json()
+        update = TelegramSettingsUpdate.model_validate(payload)
+    except ValidationError as exc:
+        details = "; ".join(
+            [".".join(map(str, error.get("loc", []))) + f": {error.get('msg')}" for error in exc.errors()]
+        )
+        raise HTTPException(status_code=400, detail=details or "Invalid Telegram settings payload") from exc
+    current = load_telegram_settings()
+    token = current.bot_token
+    if update.clear_bot_token:
+        token = ""
+    elif update.bot_token:
+        token = update.bot_token
+    enabled = current.enabled if update.enabled is None else update.enabled
+    chat_id = current.chat_id if update.chat_id is None else update.chat_id
+    settings = TelegramSettings(enabled=enabled, bot_token=token, chat_id=chat_id)
+    saved = save_telegram_settings(settings)
+    _refresh_telegram_notifier()
+    return {"status": "ok", "telegram": telegram_settings_public(saved)}
 
 
 @app.get("/api/quality/settings")

@@ -8,6 +8,7 @@ backend/.pytest_cache/
 __pycache__/
 *.pyc
 data/*.db
+data/telegram_settings.json
 data/poller.lock
 data/tmp*
 backups/

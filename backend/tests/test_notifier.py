@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.notifier import TelegramNotifier, format_alert_message
+from app.telegram_settings import TelegramSettings, save_telegram_settings
 
 
 class _FakeResponse:
@@ -73,6 +74,29 @@ def test_telegram_surfaces_api_description(monkeypatch) -> None:
     assert ok is False
     assert error is not None
     assert "chat not found" in error
+
+
+def test_telegram_notifier_uses_saved_ui_settings(monkeypatch, tmp_path) -> None:
+    calls = []
+
+    def fake_post(url, json=None, timeout=None):  # noqa: ANN001
+        calls.append({"url": url, "json": json, "timeout": timeout})
+        return _FakeResponse(200, payload={"ok": True})
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+    monkeypatch.delenv("TELEGRAM_ENABLED", raising=False)
+    monkeypatch.setattr("app.notifier.requests.post", fake_post)
+    save_telegram_settings(TelegramSettings(enabled=True, bot_token="123:secret-token", chat_id="-100123"))
+
+    notifier = TelegramNotifier(max_retries=0)
+    ok, error = notifier.send_telegram("hello")
+
+    assert ok is True
+    assert error is None
+    assert calls[0]["url"] == "https://api.telegram.org/bot123:secret-token/sendMessage"
+    assert calls[0]["json"]["chat_id"] == "-100123"
 
 
 def test_format_alert_message_contains_risk_signal_tf_bias_and_checks() -> None:

@@ -172,6 +172,10 @@ export default function DashboardPage({ view = "dashboard" }) {
   const [pollerError, setPollerError] = useState("");
   const [telegramText, setTelegramText] = useState("");
   const [telegramFeedback, setTelegramFeedback] = useState(null);
+  const [telegramSettings, setTelegramSettings] = useState(null);
+  const [telegramForm, setTelegramForm] = useState({ enabled: false, bot_token: "", chat_id: "" });
+  const [telegramSettingsStatus, setTelegramSettingsStatus] = useState("");
+  const [telegramSettingsError, setTelegramSettingsError] = useState("");
   const [error, setError] = useState("");
 
   const watchlistTfOptions = ["15m", "1h", "4h", "1d"];
@@ -201,6 +205,7 @@ export default function DashboardPage({ view = "dashboard" }) {
   const chartAbortRef = useRef(null);
   const markerDetailsRef = useRef(new Map());
   const chartTfRef = useRef(chartTf);
+  const isOpsView = view === "ops";
   const chartRefs = useRef({
     main: null,
     volume: null,
@@ -468,6 +473,27 @@ export default function DashboardPage({ view = "dashboard" }) {
     };
     loadQuality();
   }, []);
+
+  useEffect(() => {
+    if (!isOpsView) {
+      return;
+    }
+    const loadTelegramSettings = async () => {
+      try {
+        const data = await fetchAdminJson("/api/telegram/settings");
+        setTelegramSettings(data);
+        setTelegramForm({
+          enabled: Boolean(data.enabled),
+          bot_token: "",
+          chat_id: data.chat_id ?? ""
+        });
+        setTelegramSettingsError("");
+      } catch (err) {
+        setTelegramSettingsError(err instanceof Error ? err.message : "Unknown error");
+      }
+    };
+    loadTelegramSettings();
+  }, [isOpsView]);
 
   useEffect(() => {
     const loadSuppressed = async () => {
@@ -1178,6 +1204,28 @@ export default function DashboardPage({ view = "dashboard" }) {
       setPollerError("");
     } catch (err) {
       setPollerError(err instanceof Error ? err.message : "Unknown error");
+    }
+  };
+
+  const handleSaveTelegramSettings = async () => {
+    setTelegramSettingsStatus("");
+    setTelegramSettingsError("");
+    try {
+      const data = await fetchAdminJson("/api/telegram/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(telegramForm)
+      });
+      const settings = data.telegram ?? data;
+      setTelegramSettings(settings);
+      setTelegramForm({
+        enabled: Boolean(settings.enabled),
+        bot_token: "",
+        chat_id: settings.chat_id ?? ""
+      });
+      setTelegramSettingsStatus("Saved");
+    } catch (err) {
+      setTelegramSettingsError(err instanceof Error ? err.message : "Unknown error");
     }
   };
 
@@ -2789,6 +2837,56 @@ export default function DashboardPage({ view = "dashboard" }) {
           >
             Pause All
           </button>
+        </div>
+        <div className="levels-grid">
+          <div>
+            <h3>Telegram Notifier</h3>
+            {telegramSettingsError ? <div className="error">{telegramSettingsError}</div> : null}
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={telegramForm.enabled}
+                onChange={(event) =>
+                  setTelegramForm((prev) => ({ ...prev, enabled: event.target.checked }))
+                }
+              />
+              Enabled
+            </label>
+            <label className="field">
+              <span>Bot token</span>
+              <input
+                type="password"
+                value={telegramForm.bot_token}
+                onChange={(event) =>
+                  setTelegramForm((prev) => ({ ...prev, bot_token: event.target.value }))
+                }
+                placeholder={
+                  telegramSettings?.has_bot_token ? "Token saved; leave blank to keep it" : "Telegram bot token"
+                }
+                autoComplete="off"
+              />
+            </label>
+            <label className="field">
+              <span>Chat ID</span>
+              <input
+                type="text"
+                value={telegramForm.chat_id}
+                onChange={(event) =>
+                  setTelegramForm((prev) => ({ ...prev, chat_id: event.target.value }))
+                }
+                placeholder="Telegram chat ID"
+              />
+            </label>
+            <div className="inline-form inline-form-tight">
+              <button className="btn" type="button" onClick={handleSaveTelegramSettings}>
+                Save Telegram
+              </button>
+              <span className="muted">
+                {telegramSettings?.has_bot_token ? "Bot token configured" : "No bot token saved"}
+              </span>
+            </div>
+            {telegramSettingsStatus ? <p className="muted">{telegramSettingsStatus}</p> : null}
+          </div>
         </div>
         <div className="inline-form">
           <input
